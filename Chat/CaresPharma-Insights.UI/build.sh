@@ -14,9 +14,5 @@ export PATH=$HOME/.dotnet:$PATH
 # Verify installation
 dotnet --version
 
-# Publish the Blazor WebAssembly app
-dotnet publish -c Release -o release /p:EnvironmentName=DevServer
-
-# Fix for Netlify: .NET 10 adds a hash to blazor.webassembly.js but index.html expects the unhashed name.
-# Copy the hashed file so it's available under the unhashed name as well.
-cp release/wwwroot/_framework/blazor.webassembly.*.js release/wwwroot/_framework/blazor.webassembly.js 2>/dev/null || true
+# Publish the Blazor WebAssembly app with fingerprinting disabled for static hosting
+dotnet publish -c Release -o release /p:EnvironmentName=DevServer /p:WasmFingerprintAssets=false
