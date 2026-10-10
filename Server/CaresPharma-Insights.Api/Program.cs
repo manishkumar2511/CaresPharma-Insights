@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.Connectors.Google;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -27,20 +28,17 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Semantic Kernel Setup with OpenRouter
-string? openRouterKey = builder.Configuration["OpenRouter:ApiKey"] 
-    ?? throw new InvalidOperationException("OpenRouter API key is missing. Ensure it's set in appsettings.json.");
-
-HttpClient httpClient = new HttpClient(new OpenRouterHttpClientHandler());
+// Semantic Kernel Setup with Google Gemini (Using OpenAI Compatible Endpoint for maximum stability)
+string? geminiKey = builder.Configuration["Google:ApiKey"] 
+    ?? throw new InvalidOperationException("Google API key is missing. Ensure it's set in appsettings.json.");
 
 builder.Services.AddKernel()
-    .AddOpenAIChatCompletion(
-        modelId: "google/gemma-2-9b-it:free", // 100% FREE model on OpenRouter! No billing required.
-        apiKey: openRouterKey,
-        httpClient: httpClient
+    .AddGoogleAIGeminiChatCompletion(
+        modelId: "gemini-robotics-er-2-preview",
+        apiKey: geminiKey
     );
 
-builder.Services.AddSingleton<IDbConnectionFactory, PostgresConnectionFactory>();
+builder.Services.AddSingleton<IDbConnectionFactory, AppDbConnectionFactory>();
 builder.Services.AddTransient<DbInitializer>();
 builder.Services.AddHostedService<DataSyncWorker>();
 builder.Services.AddSingleton<InsightsPlugin>();
@@ -77,9 +75,9 @@ app.MapPost("/api/chat", async (ChatRequest request, InsightsPlugin plugin, SqlA
     kernel.Plugins.AddFromObject(plugin, "InsightsPlugin");
     kernel.Plugins.AddFromObject(sqlPlugin, "SqlAnalyticsPlugin"); // Add new Plugin
 
-    OpenAIPromptExecutionSettings settings = new()
+    GeminiPromptExecutionSettings settings = new()
     {
-        ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+        FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
         Temperature = 0.3
     };
 

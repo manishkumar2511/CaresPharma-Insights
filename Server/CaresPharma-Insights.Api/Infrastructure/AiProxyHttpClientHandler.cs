@@ -5,23 +5,21 @@ using System.Threading.Tasks;
 
 namespace CaresPharma_Insights.Api.Infrastructure
 {
-    public class OpenRouterHttpClientHandler : HttpClientHandler
+    public class AiProxyHttpClientHandler : HttpClientHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (request.RequestUri != null && request.RequestUri.Host == "api.openai.com")
             {
-                var uriBuilder = new UriBuilder(request.RequestUri)
+                UriBuilder uriBuilder = new UriBuilder(request.RequestUri)
                 {
                     Scheme = "https",
-                    Host = "openrouter.ai",
-                    Path = "/api" + request.RequestUri.AbsolutePath
+                    Host = "generativelanguage.googleapis.com",
+                    Path = request.RequestUri.AbsolutePath.Replace("/v1/", "/v1beta/openai/")
                 };
                 request.RequestUri = uriBuilder.Uri;
-                
-                request.Headers.Add("HTTP-Referer", "http://localhost:5500");
-                request.Headers.Add("X-Title", "CaresPharma-Insights");
             }
+            Console.WriteLine("Sending request to: " + request.RequestUri);
             return base.SendAsync(request, cancellationToken);
         }
     }

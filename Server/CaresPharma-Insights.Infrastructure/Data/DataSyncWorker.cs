@@ -40,16 +40,24 @@ namespace CaresPharma_Insights.Infrastructure.Data
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Dynamic Data Sync Worker started.");
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-
-            while (!stoppingToken.IsCancellationRequested)
+            
+            try 
             {
-                if (!string.IsNullOrEmpty(_sqlServerConnectionString))
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    await SyncAllTablesAsync(stoppingToken);
+                    if (!string.IsNullOrEmpty(_sqlServerConnectionString))
+                    {
+                        await SyncAllTablesAsync(stoppingToken);
+                    }
+                    
+                    await Task.Delay(_syncInterval, stoppingToken);
                 }
-                
-                await Task.Delay(_syncInterval, stoppingToken);
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.LogInformation("Dynamic Data Sync Worker is stopping.");
             }
         }
 
