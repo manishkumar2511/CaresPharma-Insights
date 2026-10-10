@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - dev # Change this if your branch name is different
+    paths:
+      - 'Server/**'
+      - '.github/workflows/dev-deploy.yml'
+      - 'Shared/**'
 
 jobs:
   build-and-deploy:
@@ -44,8 +48,8 @@ jobs:
           -dest:contentPath=${{ secrets.DEV_DEPLOY_SITENAME }},computerName="https://${{ secrets.DEV_DEPLOY_SERVER }}:8172/msdeploy.axd?site=${{ secrets.DEV_DEPLOY_SITENAME }}",userName="${{ secrets.DEV_DEPLOY_USERNAME }}",password="${{ secrets.DEV_DEPLOY_PASSWORD }}",authType="Basic" ^
           -allowUntrusted ^
           -enableRule:AppOffline ^
-          -retryAttempts:3 ^
-          -retryInterval:2000
+          -retryAttempts:5 ^
+          -retryInterval:3000
 
       # 8. Deployment Status
       - name: Deployment Status
