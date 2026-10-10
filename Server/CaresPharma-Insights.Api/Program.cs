@@ -58,7 +58,7 @@ using (IServiceScope scope = app.Services.CreateScope())
 
 app.UseCors("AllowBlazor");
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "DevServer")
 {
     app.MapOpenApi();
     app.UseSwagger();
