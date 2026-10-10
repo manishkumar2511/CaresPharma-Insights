@@ -29,7 +29,7 @@ builder.Services.AddCors(options =>
 
 // Semantic Kernel Setup with OpenRouter
 string? openRouterKey = builder.Configuration["OpenRouter:ApiKey"] 
-    ?? throw new InvalidOperationException("OpenRouter API key is missing. Ensure it's set in User Secrets.");
+    ?? throw new InvalidOperationException("OpenRouter API key is missing. Ensure it's set in appsettings.json.");
 
 HttpClient httpClient = new HttpClient(new OpenRouterHttpClientHandler());
 
@@ -45,7 +45,7 @@ builder.Services.AddTransient<DbInitializer>();
 builder.Services.AddHostedService<DataSyncWorker>();
 builder.Services.AddSingleton<InsightsPlugin>();
 builder.Services.AddSingleton<SqlAnalyticsPlugin>(); // New Plugin
-builder.WebHost.UseUrls("http://localhost:5500", "https://localhost:5501");
+// builder.WebHost.UseUrls("http://localhost:5500", "https://localhost:5501"); // Removed for IIS deployment
 
 WebApplication app = builder.Build();
 
