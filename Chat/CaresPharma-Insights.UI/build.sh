@@ -9,7 +9,7 @@ chmod +x ./dotnet-install.sh
 
 # Add .NET to PATH so the next commands can use it
 export DOTNET_ROOT=$HOME/.dotnet
-export PATH=$PATH:$HOME/.dotnet
+export PATH=$HOME/.dotnet:$PATH
 
 # Verify installation
 dotnet --version
