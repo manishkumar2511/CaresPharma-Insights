@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/Chat/">
+    <Project Path="Chat/CaresPharma-Insights.UI/CaresPharma-Insights.UI.csproj" />
+  </Folder>
+  <Folder Name="/Server/">
+    <Project Path="Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj" />
+    <Project Path="Server/CaresPharma-Insights.Application/CaresPharma-Insights.Application.csproj" />
+    <Project Path="Server/CaresPharma-Insights.Domain/CaresPharma-Insights.Domain.csproj" />
+    <Project Path="Server/CaresPharma-Insights.Infrastructure/CaresPharma-Insights.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="Shared/CaresPharma-Insights.Shared/CaresPharma-Insights.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CaresPharma-Insights.Tests/CaresPharma-Insights.Tests.csproj" />
+  </Folder>
+</Solution>

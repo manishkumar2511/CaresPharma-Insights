@@ -1,0 +1,50 @@
+@inherits LayoutComponentBase
+
+<div class="layout-container">
+    <div class="sidebar-overlay @(isSidebarOpen ? "show" : "")" @onclick="ToggleSidebar"></div>
+
+    <div class="sidebar @(isSidebarOpen ? "show" : "")">
+        <div class="sidebar-header">
+            <img src="images/carespharma-logo.png" alt="CaresPharma Logo" style="height: 24px; object-fit: contain;" />
+            <div class="logo-text">
+                <span class="logo-text-cares">Cares</span><span class="logo-text-pharma">Pharma</span>
+                <span class="logo-text-insights">Insights</span>
+            </div>
+            <button class="close-sidebar-btn" @onclick="ToggleSidebar">?</button>
+        </div>
+        <div class="sidebar-content">
+            <h4 class="sidebar-title">Recent Chats</h4>
+            <div class="history-item active" @onclick="CloseSidebarOnMobile">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                Current Session
+            </div>
+        </div>
+    </div>
+
+    <main class="chat-wrapper">
+        <div class="mobile-header">
+            <div class="hamburger-menu" @onclick="ToggleSidebar">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <img src="images/carespharma-logo.png" alt="CaresPharma Logo" style="height: 18px; object-fit: contain;" />
+                <span class="logo-text-insights" style="font-size: 8px; margin-left: 0; padding: 2px 5px;">Insights</span>
+            </div>
+        </div>
+        @Body
+    </main>
+</div>
+
+@code {
+    private bool isSidebarOpen = false;
+
+    private void ToggleSidebar()
+    {
+        isSidebarOpen = !isSidebarOpen;
+    }
+
+    private void CloseSidebarOnMobile()
+    {
+        isSidebarOpen = false;
+    }
+}

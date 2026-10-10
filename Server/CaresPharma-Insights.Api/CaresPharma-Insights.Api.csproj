@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CaresPharma_Insights.Api</RootNamespace>
+    <UserSecretsId>cf9557b1-9a13-427a-9dce-b243ebab6452</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.81.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.81.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CaresPharma-Insights.Application\CaresPharma-Insights.Application.csproj" />
+    <ProjectReference Include="..\CaresPharma-Insights.Infrastructure\CaresPharma-Insights.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Shared\CaresPharma-Insights.Shared\CaresPharma-Insights.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
