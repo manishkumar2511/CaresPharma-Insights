@@ -16,3 +16,7 @@ dotnet --version
 
 # Publish the Blazor WebAssembly app with fingerprinting disabled for static hosting
 dotnet publish -c Release -o release /p:EnvironmentName=DevServer /p:WasmFingerprintAssets=false
+
+# Fix for Netlify: .NET 10 adds a hash to blazor.webassembly.js even with fingerprinting disabled!
+# Copy the hashed file so it's available under the unhashed name expected by index.html.
+cp release/wwwroot/_framework/blazor.webassembly.*.js release/wwwroot/_framework/blazor.webassembly.js 2>/dev/null || true
