@@ -32,17 +32,7 @@ jobs:
 
       # 5. Publish project
       - name: Publish project
-        run: dotnet publish Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj -c Release -o published --no-build
-
-      # 6. Inject ENV into web.config
-      - name: Inject DevServer ENV into web.config
-        shell: powershell
-        run: |
-          if (Test-Path "published/web.config") {
-            $content = Get-Content published/web.config -Raw
-            $content = $content -replace '__ENV__', 'DevServer'
-            Set-Content published/web.config $content
-          }
+        run: dotnet publish Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj -c Release -o published --no-build -p:EnvironmentName=DevServer
 
       # 7. Deploy via WebDeploy
       - name: Deploy via WebDeploy
