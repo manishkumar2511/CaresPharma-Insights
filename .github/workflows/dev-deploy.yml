@@ -1,0 +1,69 @@
+name: Build & Deploy Insights API to Dev-DevServer
+
+on:
+  push:
+    branches:
+      - dev # Change this if your branch name is different
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup .NET (We are using .NET 10 for Insights)
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # 3. Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj
+
+      # 4. Build project
+      - name: Build project
+        run: dotnet build Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj --configuration Release --no-restore
+
+      # Note: EF Core Migrations step is REMOVED because Insights API uses Dapper & raw SQL.
+
+      # 5. Publish project
+      - name: Publish project
+        run: dotnet publish Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj -c Release -o published --no-build
+
+      # 6. Inject ENV into web.config
+      - name: Inject DevServer ENV into web.config
+        shell: powershell
+        run: |
+          if (Test-Path "published/web.config") {
+            $content = Get-Content published/web.config -Raw
+            $content = $content -replace '__ENV__', 'DevServer'
+            Set-Content published/web.config $content
+          }
+
+      # 7. Deploy via WebDeploy
+      - name: Deploy via WebDeploy
+        shell: cmd
+        run: |
+          "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" ^
+          -verb:sync ^
+          -source:contentPath="%CD%\published" ^
+          -dest:contentPath=${{ secrets.DEV_DEPLOY_SITENAME }},computerName="https://${{ secrets.DEV_DEPLOY_SERVER }}:8172/msdeploy.axd?site=${{ secrets.DEV_DEPLOY_SITENAME }}",userName="${{ secrets.DEV_DEPLOY_USERNAME }}",password="${{ secrets.DEV_DEPLOY_PASSWORD }}",authType="Basic" ^
+          -allowUntrusted ^
+          -enableRule:AppOffline ^
+          -retryAttempts:3 ^
+          -retryInterval:2000
+
+      # 8. Deployment Status
+      - name: Deployment Status
+        shell: powershell
+        run: |
+          Write-Host ""
+          Write-Host "======================================="
+          Write-Host "INSIGHTS API DEPLOYMENT COMPLETED SUCCESSFULLY"
+          Write-Host "Environment : Dev Server"
+          Write-Host "======================================="
+          Write-Host ""
