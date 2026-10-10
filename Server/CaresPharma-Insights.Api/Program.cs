@@ -35,7 +35,7 @@ HttpClient httpClient = new HttpClient(new OpenRouterHttpClientHandler());
 
 builder.Services.AddKernel()
     .AddOpenAIChatCompletion(
-        modelId: "openai/gpt-4o-mini", // Free/fast model on OpenRouter
+        modelId: "google/gemma-2-9b-it:free", // 100% FREE model on OpenRouter! No billing required.
         apiKey: openRouterKey,
         httpClient: httpClient
     );
