@@ -81,7 +81,7 @@
 
         try
         {
-            HttpResponseMessage response = await Http.PostAsJsonAsync("https://localhost:5501/api/chat", new { Message = currentMessage });
+            HttpResponseMessage response = await Http.PostAsJsonAsync("api/chat", new { Message = currentMessage });
             
             if (response.IsSuccessStatusCode)
             {
@@ -90,14 +90,12 @@
             }
             else
             {
-                await Task.Delay(500);
-                messages.Add(new ChatMessage { Content = "Hello! Aapki query ke mutabiq, aapke total users 45 hain.", IsUser = false });
+                messages.Add(new ChatMessage { Content = $"Sorry, API Error: {response.StatusCode}", IsUser = false });
             }
         }
-        catch
+        catch (Exception ex)
         {
-            await Task.Delay(500);
-            messages.Add(new ChatMessage { Content = "Hello! Aapki query ke mutabiq, aapke total users 45 hain.", IsUser = false });
+            messages.Add(new ChatMessage { Content = "Error connecting to the backend server. Please try again later.", IsUser = false });
         }
         finally
         {
