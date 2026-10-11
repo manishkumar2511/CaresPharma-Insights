@@ -141,7 +141,16 @@
     {
         try
         {
-            HttpResponseMessage response = await Http.GetAsync("api/conversations");
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/conversations");
+            string? token = await Auth.GetTokenAsync();
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                string cleanToken = token.Trim().Trim('"');
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+                Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+            }
+
+            HttpResponseMessage response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
                 conversations = await response.Content.ReadFromJsonAsync<List<ConversationSummaryDto>>() ?? new();

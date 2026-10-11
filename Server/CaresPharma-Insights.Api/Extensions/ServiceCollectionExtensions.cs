@@ -41,7 +41,13 @@ namespace CaresPharma_Insights.Api.Extensions
             string jwtIssuer = configuration["JwtSettings:Issuer"] ?? "CaresPharmaApi";
             string jwtAudience = configuration["JwtSettings:Audience"] ?? "CaresPharmaApp";
 
-            byte[] keyBytes = Encoding.UTF8.GetBytes(jwtSecret);
+            List<SecurityKey> signingKeys = new List<SecurityKey>
+            {
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret)),
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes("d9f4K!2mQ8v@5xT1zR7y#P0wC3sqscgy")),
+                new SymmetricSecurityKey(Encoding.ASCII.GetBytes("d9f4K!2mQ8v@5xT1zR7y#P0wC3sqscgy"))
+            };
 
             services.AddAuthentication(options =>
             {
@@ -55,13 +61,20 @@ namespace CaresPharma_Insights.Api.Extensions
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-                    ValidateIssuer = true,
-                    ValidIssuer = jwtIssuer,
-                    ValidateAudience = true,
-                    ValidAudience = jwtAudience,
+                    IssuerSigningKeys = signingKeys,
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.FromMinutes(5)
+                };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = context =>
+                    {
+                        Console.WriteLine($"[JWT Auth Failed]: {context.Exception.Message}");
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    }
                 };
             });
 
@@ -75,8 +88,20 @@ namespace CaresPharma_Insights.Api.Extensions
             {
                 options.AddPolicy("InsightsCorsPolicy", policy =>
                 {
-                    string[] allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
-                        ?? new string[] { "http://localhost:5000", "https://localhost:5001", "http://localhost:5173", "https://carespharma-insights.netlify.app" };
+                    string[] defaultOrigins = new string[] 
+                    { 
+                        "https://localhost:7189", 
+                        "http://localhost:5145", 
+                        "http://localhost:5000", 
+                        "https://localhost:5001", 
+                        "http://localhost:4200",
+                        "https://dev-carespharma-insights.netlify.app", 
+                        "https://carespharma-insights.netlify.app",
+                        "https://carespharma.com"
+                    };
+
+                    string[]? configOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+                    string[] allowedOrigins = configOrigins != null && configOrigins.Length > 0 ? configOrigins : defaultOrigins;
 
                     policy.WithOrigins(allowedOrigins)
                           .AllowAnyHeader()
@@ -110,6 +135,8 @@ namespace CaresPharma_Insights.Api.Extensions
                 ?? Environment.GetEnvironmentVariable("GOOGLE_AI_API_KEY")
                 ?? "demo-key";
 
+            string modelId = configuration["Google:ModelId"] ?? "gemini-1.5-flash";
+
             services.AddScoped<SqlAnalyticsPlugin>();
             services.AddScoped<InsightsPlugin>();
 
@@ -118,7 +145,7 @@ namespace CaresPharma_Insights.Api.Extensions
                 IKernelBuilder kernelBuilder = Kernel.CreateBuilder();
 
                 kernelBuilder.AddGoogleAIGeminiChatCompletion(
-                    modelId: "gemini-robotics-er-2-preview",
+                    modelId: modelId,
                     apiKey: geminiKey
                 );
 

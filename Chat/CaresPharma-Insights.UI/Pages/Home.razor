@@ -152,7 +152,16 @@
 
         try
         {
-            HttpResponseMessage response = await Http.GetAsync($"api/conversations/{conversationId.Value}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/conversations/{conversationId.Value}");
+            string? token = await Auth.GetTokenAsync();
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                string cleanToken = token.Trim().Trim('"');
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+                Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+            }
+
+            HttpResponseMessage response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
                 ConversationDetailDto? detail = await response.Content.ReadFromJsonAsync<ConversationDetailDto>();
@@ -218,13 +227,28 @@
 
         try
         {
+            string? token = await Auth.GetTokenAsync();
+            string? cleanToken = !string.IsNullOrWhiteSpace(token) ? token.Trim().Trim('"') : null;
+            if (!string.IsNullOrWhiteSpace(cleanToken))
+            {
+                Auth.ApplyAuthorizationHeader(cleanToken);
+                Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+            }
+
             ChatRequest request = new ChatRequest(
                 Message: currentMessage, 
                 ConversationId: currentConversationId,
                 History: messages.Take(messages.Count - 1).ToList()
             );
 
-            HttpResponseMessage response = await Http.PostAsJsonAsync("api/chat", request);
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/chat");
+            requestMessage.Content = JsonContent.Create(request);
+            if (!string.IsNullOrWhiteSpace(cleanToken))
+            {
+                requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", cleanToken);
+            }
+
+            HttpResponseMessage response = await Http.SendAsync(requestMessage);
             
             if (response.IsSuccessStatusCode)
             {
@@ -240,12 +264,15 @@
             }
             else
             {
-                messages.Add(new ChatMessageDto($"Sorry, API Error: {response.StatusCode}", false));
+                string errorBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Chat API Error: {response.StatusCode} - {errorBody}");
+                messages.Add(new ChatMessageDto($"Server Error ({(int)response.StatusCode}): {(string.IsNullOrWhiteSpace(errorBody) ? response.ReasonPhrase : errorBody)}", false));
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            messages.Add(new ChatMessageDto("Error connecting to the backend server. Please try again later.", false));
+            Console.WriteLine($"Backend connection exception: {ex}");
+            messages.Add(new ChatMessageDto($"Error connecting to the backend server: {ex.Message}", false));
         }
         finally
         {
