@@ -51,15 +51,22 @@
         <div class="chat-history" id="chatHistory">
             @if (messages.Count == 0)
             {
-                <div class="message ai" style="align-self: center; text-align: center; margin-top: 50px; background: transparent; border: none; box-shadow: none;">
-                    <h3 style="color: #0f172a; font-weight: 800; font-size: 26px; margin-bottom: 12px;">Welcome to CaresPharma <span style="color: #00bcd4;">Insights</span></h3>
-                    <p style="color: #64748b; font-size: 16px; max-width: 500px; margin: 0 auto;">Ask me anything about your platform's data. I am strictly restricted to your authorized store & pharmacy data.</p>
-                    <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 10px; align-items: center;">
-                        <div @onclick="@(() => ApplyPrompt("Show me the total number of users."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
-                            <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Show me the total number of users."</span>
+                <div class="welcome-screen">
+                    <div class="welcome-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00bcd4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="welcome-title">Welcome to CaresPharma <span style="color: #00bcd4;">Insights</span></h3>
+                    <p class="welcome-desc">Ask me anything about your pharmacy data. I am strictly restricted to your authorized store & business insights.</p>
+                    <div class="welcome-prompts">
+                        <div class="prompt-chip" @onclick="@(() => ApplyPrompt("Show me the total number of users."))">
+                            <span class="prompt-icon">?</span>
+                            <span class="prompt-text">"Show me the total number of users."</span>
                         </div>
-                        <div @onclick="@(() => ApplyPrompt("Aaj ki total sales report dikhao."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
-                            <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Aaj ki total sales report dikhao."</span>
+                        <div class="prompt-chip" @onclick="@(() => ApplyPrompt("Aaj ki total sales report dikhao."))">
+                            <span class="prompt-icon">?</span>
+                            <span class="prompt-text">"Aaj ki total sales report dikhao."</span>
                         </div>
                     </div>
                 </div>
