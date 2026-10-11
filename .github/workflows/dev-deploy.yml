@@ -38,6 +38,22 @@ jobs:
       - name: Publish project
         run: dotnet publish Server/CaresPharma-Insights.Api/CaresPharma-Insights.Api.csproj -c Release -o published --no-build -p:EnvironmentName=DevServer
 
+      # 6. Inject Secrets into published config
+      - name: Inject Production Secrets
+        shell: powershell
+        run: |
+          $configPath = "published/appsettings.json"
+          if (Test-Path $configPath) {
+            $json = Get-Content $configPath -Raw | ConvertFrom-Json
+            if (-not $json.Google) { $json | Add-Member -MemberType NoteProperty -Name "Google" -Value ([PSCustomObject]@{}) }
+            if ("${{ secrets.GOOGLE_AI_API_KEY }}" -ne "") {
+              $json.Google.ApiKey = "${{ secrets.GOOGLE_AI_API_KEY }}"
+            }
+            $json.Google.ModelId = "gemini-3.8-flash"
+            $json | ConvertTo-Json -Depth 10 | Set-Content $configPath
+            Write-Host "Injected Google Gemini configuration into published appsettings.json successfully."
+          }
+
       # 7. Deploy via WebDeploy
       - name: Deploy via WebDeploy
         shell: cmd

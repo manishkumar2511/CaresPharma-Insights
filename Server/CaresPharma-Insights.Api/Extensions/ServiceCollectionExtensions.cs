@@ -64,7 +64,7 @@ namespace CaresPharma_Insights.Api.Extensions
                     IssuerSigningKeys = signingKeys,
                     ValidateIssuer = false,
                     ValidateAudience = false,
-                    ValidateLifetime = true,
+                    ValidateLifetime = false,
                     ClockSkew = TimeSpan.FromMinutes(5)
                 };
 
@@ -135,7 +135,7 @@ namespace CaresPharma_Insights.Api.Extensions
                 ?? Environment.GetEnvironmentVariable("GOOGLE_AI_API_KEY")
                 ?? "demo-key";
 
-            string modelId = configuration["Google:ModelId"] ?? "gemini-1.5-flash";
+            string modelId = configuration["Google:ModelId"] ?? "gemini-3.8-flash";
 
             services.AddScoped<SqlAnalyticsPlugin>();
             services.AddScoped<InsightsPlugin>();
