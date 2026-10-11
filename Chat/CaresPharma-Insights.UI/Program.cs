@@ -20,6 +20,10 @@ if (baseAddress.Contains("localhost") || baseAddress.Contains("127.0.0.1"))
 {
     apiBaseUrl = "https://localhost:5501/";
 }
+else if (baseAddress.Contains("dev-carespharma-insights") || baseAddress.Contains("dev-"))
+{
+    apiBaseUrl = "https://dev-carespharma-insights.runasp.net/";
+}
 
 builder.Services.AddScoped(serviceProvider => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 builder.Services.AddScoped<AuthService>();
