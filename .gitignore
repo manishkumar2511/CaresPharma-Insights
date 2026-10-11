@@ -17,6 +17,8 @@
 mono_crash.*
 
 # Build results
+pub_test/
+testwasm/
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/

@@ -1,68 +1,198 @@
 @page "/"
 @inject HttpClient Http
+@inject CaresPharma_Insights.UI.Services.AuthService Auth
 @using System.Net.Http.Json
+@using CaresPharma_Insights.Shared.Dtos
 
 <div class="chat-container">
-    <div class="chat-history" id="chatHistory">
-        @if (messages.Count == 0)
-        {
-            <div class="message ai" style="align-self: center; text-align: center; margin-top: 50px; background: transparent; border: none; box-shadow: none;">
-                <h3 style="color: #0f172a; font-weight: 800; font-size: 26px; margin-bottom: 12px;">Welcome to CaresPharma <span style="color: #00bcd4;">Insights</span></h3>
-                <p style="color: #64748b; font-size: 16px; max-width: 500px; margin: 0 auto;">Ask me anything about your platform's data. I can provide insights for superadmins, store managers, and network partners.</p>
-                <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 10px; align-items: center;">
-                    <div @onclick="@(() => ApplyPrompt("Show me the total number of users."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
-                        <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Show me the total number of users."</span>
-                    </div>
-                    <div @onclick="@(() => ApplyPrompt("Aaj ki total sales report dikhao."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
-                        <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Aaj ki total sales report dikhao."</span>
-                    </div>
+    @if (!isAuthenticated)
+    {
+        <!-- Continue as CaresPharma User SSO Card -->
+        <div class="auth-gate-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px; text-align: center;">
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 40px 32px; max-width: 480px; width: 100%; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 16px; background: #e0f7fa; margin-bottom: 20px;">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00bcd4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
                 </div>
-            </div>
-        }
-        else
-        {
-            @foreach (ChatMessage msg in messages)
-            {
-                <div class="message @(msg.IsUser ? "user" : "ai")">
-                    @if (msg.IsUser)
+                
+                <h2 style="color: #0f172a; font-size: 24px; font-weight: 800; margin-bottom: 8px;">CaresPharma <span style="color: #00bcd4;">Insights</span></h2>
+                <p style="color: #64748b; font-size: 14px; line-height: 1.5; margin-bottom: 28px;">
+                    Enterprise AI copilot for pharmacy superadmins, owners, and store managers. Connect your active CaresPharma session to analyze your live business data.
+                </p>
+
+                <button @onclick="HandleContinueAsCaresPharmaUser" disabled="@isConnecting" style="width: 100%; background: #00bcd4; color: #ffffff; border: none; border-radius: 10px; padding: 14px 20px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 4px 12px rgba(0,188,212,0.3); transition: all 0.2s ease;">
+                    @if (isConnecting)
                     {
-                        @msg.Content
+                        <span>Connecting to CaresPharma...</span>
                     }
                     else
                     {
-                        @((MarkupString)Markdig.Markdown.ToHtml(msg.Content))
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                            <polyline points="10 17 15 12 10 7"></polyline>
+                            <line x1="15" y1="12" x2="3" y2="12"></line>
+                        </svg>
+                        <span>Continue as CaresPharma User</span>
                     }
-                </div>
-            }
+                </button>
 
-            @if (isTyping)
+                @if (!string.IsNullOrEmpty(authErrorMessage))
+                {
+                    <div style="margin-top: 16px; padding: 10px; background: #fee2e2; border-radius: 8px; color: #b91c1c; font-size: 13px;">
+                        @authErrorMessage
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="chat-history" id="chatHistory">
+            @if (messages.Count == 0)
             {
-                <div class="message ai typing-indicator">
-                    <div class="dot"></div>
-                    <div class="dot"></div>
-                    <div class="dot"></div>
+                <div class="message ai" style="align-self: center; text-align: center; margin-top: 50px; background: transparent; border: none; box-shadow: none;">
+                    <h3 style="color: #0f172a; font-weight: 800; font-size: 26px; margin-bottom: 12px;">Welcome to CaresPharma <span style="color: #00bcd4;">Insights</span></h3>
+                    <p style="color: #64748b; font-size: 16px; max-width: 500px; margin: 0 auto;">Ask me anything about your platform's data. I am strictly restricted to your authorized store & pharmacy data.</p>
+                    <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                        <div @onclick="@(() => ApplyPrompt("Show me the total number of users."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
+                            <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Show me the total number of users."</span>
+                        </div>
+                        <div @onclick="@(() => ApplyPrompt("Aaj ki total sales report dikhao."))" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 20px; border-radius: 8px; color: #64748b; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); width: 100%; max-width: 400px; text-align: left; cursor: pointer;">
+                            <span style="color: #00bcd4; font-size: 16px;">?</span> <span style="color: #0f172a; font-weight: 600; margin-left: 8px;">"Aaj ki total sales report dikhao."</span>
+                        </div>
+                    </div>
                 </div>
             }
-        }
-    </div>
+            else
+            {
+                @foreach (ChatMessageDto msg in messages)
+                {
+                    <div class="message @(msg.IsUser ? "user" : "ai")">
+                        @if (msg.IsUser)
+                        {
+                            @msg.Content
+                        }
+                        else
+                        {
+                            @((MarkupString)Markdig.Markdown.ToHtml(msg.Content))
+                        }
+                    </div>
+                }
 
-    <div class="input-area">
-        <form @onsubmit="SendMessage" class="input-box">
-            <input @bind="userInput" @bind:event="oninput" type="text" class="chat-input" placeholder="Type your query in Hindi or English..." disabled="@isTyping" />
-            <button type="submit" class="send-btn" disabled="@(string.IsNullOrWhiteSpace(userInput) || isTyping)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-            </button>
-        </form>
-    </div>
+                @if (isTyping)
+                {
+                    <div class="message ai typing-indicator">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="input-area">
+            <form @onsubmit="SendMessage" class="input-box">
+                <input @bind="userInput" @bind:event="oninput" type="text" class="chat-input" placeholder="Type your query in Hindi or English..." disabled="@isTyping" />
+                <button type="submit" class="send-btn" disabled="@(string.IsNullOrWhiteSpace(userInput) || isTyping)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    }
 </div>
 
 @code {
+    [CascadingParameter]
+    public CaresPharma_Insights.UI.Layout.MainLayout? Layout { get; set; }
+
+    private bool isAuthenticated = false;
+    private bool isConnecting = false;
+    private string authErrorMessage = "";
+
     private string userInput = "";
     private bool isTyping = false;
-    private List<ChatMessage> messages = new();
+    private List<ChatMessageDto> messages = new();
+    private Guid? currentConversationId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        string? existingToken = await Auth.GetTokenAsync();
+        if (!string.IsNullOrWhiteSpace(existingToken))
+        {
+            isAuthenticated = true;
+            if (Layout != null) await Layout.RefreshAuthAndConversationsAsync();
+        }
+
+        if (Layout != null)
+        {
+            Layout.OnConversationSelected += OnConversationSelected;
+        }
+    }
+
+    private async void OnConversationSelected(Guid? conversationId)
+    {
+        currentConversationId = conversationId;
+        if (conversationId == null)
+        {
+            messages.Clear();
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            HttpResponseMessage response = await Http.GetAsync($"api/conversations/{conversationId.Value}");
+            if (response.IsSuccessStatusCode)
+            {
+                ConversationDetailDto? detail = await response.Content.ReadFromJsonAsync<ConversationDetailDto>();
+                messages = detail?.Messages ?? new();
+            }
+        }
+        catch (Exception)
+        {
+            // Handled
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleContinueAsCaresPharmaUser()
+    {
+        isConnecting = true;
+        authErrorMessage = "";
+        StateHasChanged();
+
+        string? token = await Auth.GetTokenAsync();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            isAuthenticated = true;
+            isConnecting = false;
+            if (Layout != null) await Layout.RefreshAuthAndConversationsAsync();
+            StateHasChanged();
+            return;
+        }
+
+        // Open Google-like popup window for CaresPharma SSO
+        bool success = await Auth.LoginWithPopupAsync();
+        isConnecting = false;
+
+        if (success)
+        {
+            isAuthenticated = true;
+            if (Layout != null) await Layout.RefreshAuthAndConversationsAsync();
+        }
+        else
+        {
+            authErrorMessage = "Login was cancelled or closed. Please try again.";
+        }
+        StateHasChanged();
+    }
 
     private void ApplyPrompt(string prompt)
     {
@@ -74,44 +204,46 @@
         if (string.IsNullOrWhiteSpace(userInput)) return;
 
         string currentMessage = userInput;
-        messages.Add(new ChatMessage { Content = currentMessage, IsUser = true });
+        messages.Add(new ChatMessageDto(currentMessage, true));
         userInput = "";
         isTyping = true;
         StateHasChanged();
 
         try
         {
-            HttpResponseMessage response = await Http.PostAsJsonAsync("api/chat", new { Message = currentMessage });
+            ChatRequest request = new ChatRequest(
+                Message: currentMessage, 
+                ConversationId: currentConversationId,
+                History: messages.Take(messages.Count - 1).ToList()
+            );
+
+            HttpResponseMessage response = await Http.PostAsJsonAsync("api/chat", request);
             
             if (response.IsSuccessStatusCode)
             {
                 ChatResponse? result = await response.Content.ReadFromJsonAsync<ChatResponse>();
-                messages.Add(new ChatMessage { Content = result?.Reply ?? "Error getting response", IsUser = false });
+                currentConversationId = result?.ConversationId ?? currentConversationId;
+                messages.Add(new ChatMessageDto(result?.Reply ?? "Error getting response", false));
+                
+                // Refresh sidebar conversation list
+                if (Layout != null)
+                {
+                    await Layout.LoadConversationsAsync();
+                }
             }
             else
             {
-                messages.Add(new ChatMessage { Content = $"Sorry, API Error: {response.StatusCode}", IsUser = false });
+                messages.Add(new ChatMessageDto($"Sorry, API Error: {response.StatusCode}", false));
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            messages.Add(new ChatMessage { Content = "Error connecting to the backend server. Please try again later.", IsUser = false });
+            messages.Add(new ChatMessageDto("Error connecting to the backend server. Please try again later.", false));
         }
         finally
         {
             isTyping = false;
             StateHasChanged();
         }
-    }
-
-    public class ChatMessage
-    {
-        public string Content { get; set; } = "";
-        public bool IsUser { get; set; }
-    }
-    
-    public class ChatResponse
-    {
-        public string Reply { get; set; } = "";
     }
 }

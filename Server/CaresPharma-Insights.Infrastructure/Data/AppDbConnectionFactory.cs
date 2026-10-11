@@ -1,4 +1,6 @@
+using System;
 using System.Data;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
@@ -8,24 +10,23 @@ namespace CaresPharma_Insights.Infrastructure.Data
 {
     public class AppDbConnectionFactory : IDbConnectionFactory
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _connectionString;
 
         public AppDbConnectionFactory(IConfiguration configuration)
         {
-            _configuration = configuration;
+            _connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
         }
 
         public IDbConnection CreateConnection()
         {
-            string? connectionString = _configuration.GetConnectionString("DefaultConnection");
-            return new NpgsqlConnection(connectionString);
+            return new NpgsqlConnection(_connectionString);
         }
 
-        public async Task<IDbConnection> CreateConnectionAsync()
+        public async Task<IDbConnection> CreateConnectionAsync(CancellationToken cancellationToken = default)
         {
-            string? connectionString = _configuration.GetConnectionString("DefaultConnection");
-            NpgsqlConnection connection = new NpgsqlConnection(connectionString);
-            await connection.OpenAsync();
+            NpgsqlConnection connection = new NpgsqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
             return connection;
         }
     }

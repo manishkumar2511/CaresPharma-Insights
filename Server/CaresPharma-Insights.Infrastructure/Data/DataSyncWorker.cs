@@ -1,14 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.Data.SqlClient;
+using Npgsql;
 using Dapper;
 using CaresPharma_Insights.Domain.Interfaces;
+using CaresPharma_Insights.Shared.Configurations;
 
 namespace CaresPharma_Insights.Infrastructure.Data
 {
@@ -17,125 +22,187 @@ namespace CaresPharma_Insights.Infrastructure.Data
         private readonly ILogger<DataSyncWorker> _logger;
         private readonly IDbConnectionFactory _pgConnectionFactory;
         private readonly string _sqlServerConnectionString;
-        private readonly TimeSpan _syncInterval = TimeSpan.FromHours(1);
-
-        // Configuration-driven keywords and tables
-        private readonly string[] _sensitiveKeywords;
-        private readonly string[] _excludedTables;
+        private readonly TimeSpan _syncInterval;
+        private readonly SyncSettings _syncSettings;
+        private readonly SemaphoreSlim _syncLock = new(1, 1);
 
         public DataSyncWorker(
             ILogger<DataSyncWorker> logger, 
             IDbConnectionFactory pgConnectionFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IOptions<SyncSettings> syncSettingsOptions)
         {
             _logger = logger;
             _pgConnectionFactory = pgConnectionFactory;
-            _sqlServerConnectionString = configuration.GetConnectionString("SqlServerSource") ?? "";
-            
-            // Read from appsettings.json
-            _sensitiveKeywords = configuration.GetSection("SyncSettings:ExcludedColumnKeywords").Get<string[]>() ?? Array.Empty<string>();
-            _excludedTables = configuration.GetSection("SyncSettings:ExcludedTables").Get<string[]>() ?? Array.Empty<string>();
+            _sqlServerConnectionString = configuration.GetConnectionString("SqlServerSource") ?? string.Empty;
+            _syncSettings = syncSettingsOptions.Value;
+            _syncInterval = TimeSpan.FromMinutes(_syncSettings.SyncIntervalMinutes > 0 ? _syncSettings.SyncIntervalMinutes : 60);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Dynamic Data Sync Worker started.");
+            _logger.LogInformation("Dynamic Data Sync Worker initialized with {Interval} minutes interval.", _syncInterval.TotalMinutes);
             
             try 
             {
+                // Warmup delay before first sync cycle
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     if (!string.IsNullOrEmpty(_sqlServerConnectionString))
                     {
-                        await SyncAllTablesAsync(stoppingToken);
+                        await SafeSyncAllTablesAsync(stoppingToken);
                     }
                     
                     await Task.Delay(_syncInterval, stoppingToken);
                 }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
-                _logger.LogInformation("Dynamic Data Sync Worker is stopping.");
+                _logger.LogInformation("Data Sync Worker canceled gracefully.");
             }
         }
 
-        private async Task SyncAllTablesAsync(CancellationToken cancellationToken)
+        private async Task SafeSyncAllTablesAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Starting dynamic schema & data sync...");
-
-            using SqlConnection sqlConnection = new SqlConnection(_sqlServerConnectionString);
-            await sqlConnection.OpenAsync(cancellationToken);
-
-            using IDbConnection pgConnection = await _pgConnectionFactory.CreateConnectionAsync();
-
-            // 1. Get all tables from SQL Server
-            IEnumerable<string> tables = await sqlConnection.QueryAsync<string>(
-                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'");
-
-            foreach (string table in tables)
+            // Concurrency guard: Ensure multiple runs do not execute simultaneously
+            if (!await _syncLock.WaitAsync(0, cancellationToken))
             {
-                if (_excludedTables.Contains(table)) continue;
-                
-                await SyncTableAsync(table, sqlConnection, pgConnection);
+                _logger.LogWarning("Previous sync is still in progress. Skipping cycle.");
+                return;
             }
 
-            _logger.LogInformation("Dynamic sync completed.");
+            try
+            {
+                _logger.LogInformation("Beginning dynamic database synchronization...");
+
+                using SqlConnection sqlConnection = new SqlConnection(_sqlServerConnectionString);
+                await sqlConnection.OpenAsync(cancellationToken);
+
+                using IDbConnection pgDbConnection = await _pgConnectionFactory.CreateConnectionAsync(cancellationToken);
+                NpgsqlConnection pgConnection = (NpgsqlConnection)pgDbConnection;
+
+                // Retrieve base tables from SQL Server
+                IEnumerable<string> rawTables = await sqlConnection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'",
+                        cancellationToken: cancellationToken));
+
+                List<string> tables = rawTables.ToList();
+
+                foreach (string table in tables)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    if (_syncSettings.ExcludedTables.Contains(table, StringComparer.OrdinalIgnoreCase)) continue;
+
+                    try
+                    {
+                        await SyncTableAtomicallyAsync(table, sqlConnection, pgConnection, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to sync table '{TableName}'. Continuing with next table.", table);
+                    }
+                }
+
+                _logger.LogInformation("Dynamic synchronization cycle finished successfully.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Fatal error encountered during database synchronization.");
+            }
+            finally
+            {
+                _syncLock.Release();
+            }
         }
 
-        private async Task SyncTableAsync(string tableName, IDbConnection sqlConn, IDbConnection pgConn)
+        private async Task SyncTableAtomicallyAsync(
+            string tableName, 
+            SqlConnection sqlConn, 
+            NpgsqlConnection pgConn, 
+            CancellationToken ct)
         {
-            _logger.LogInformation($"Syncing table: {tableName}");
+            _logger.LogInformation("Syncing table: {TableName}", tableName);
 
-            // 2. Get Columns
-            IEnumerable<ColumnSchema> columns = await sqlConn.QueryAsync<ColumnSchema>(@"
-                SELECT COLUMN_NAME as ColumnName, DATA_TYPE as DataType 
-                FROM INFORMATION_SCHEMA.COLUMNS 
-                WHERE TABLE_NAME = @TableName", new { TableName = tableName });
+            // 1. Fetch source column definitions
+            IEnumerable<ColumnSchema> rawColumns = await sqlConn.QueryAsync<ColumnSchema>(
+                new CommandDefinition(@"
+                    SELECT COLUMN_NAME as ColumnName, DATA_TYPE as DataType 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_NAME = @TableName", 
+                    new { TableName = tableName },
+                    cancellationToken: ct));
 
-            // Filter sensitive columns
+            List<ColumnSchema> columns = rawColumns.ToList();
+
+            // 2. Filter sensitive column fields using strongly-typed settings
             List<ColumnSchema> safeColumns = columns.Where(c => 
-                !_sensitiveKeywords.Any(k => c.ColumnName.Contains(k, StringComparison.OrdinalIgnoreCase))).ToList();
+                !_syncSettings.ExcludedColumnKeywords.Any(keyword => c.ColumnName.Contains(keyword, StringComparison.OrdinalIgnoreCase))).ToList();
 
-            if (!safeColumns.Any()) return;
+            if (safeColumns.Count == 0) return;
 
-            // 3. Create Table in PostgreSQL if not exists
-            string pgCreateTableSql = $"CREATE TABLE IF NOT EXISTS \"{tableName}\" (";
-            List<string> colDefs = new List<string>();
-            foreach(ColumnSchema col in safeColumns)
+            // 3. Create destination table in PostgreSQL if not exists
+            IEnumerable<string> colDefs = safeColumns.Select(c => $"\"{c.ColumnName}\" {MapSqlTypeToPgType(c.DataType)}");
+            string createTableSql = $"CREATE TABLE IF NOT EXISTS \"{tableName}\" ({string.Join(", ", colDefs)});";
+            await pgConn.ExecuteAsync(new CommandDefinition(createTableSql, cancellationToken: ct));
+
+            // 4. Create an unlogged temporary staging table with identical schema
+            string stagingTable = $"staging_{tableName.ToLower()}";
+            await pgConn.ExecuteAsync(new CommandDefinition(
+                $"DROP TABLE IF EXISTS \"{stagingTable}\"; CREATE TEMP TABLE \"{stagingTable}\" AS SELECT * FROM \"{tableName}\" WITH NO DATA;",
+                cancellationToken: ct));
+
+            // 5. Stream from SQL Server directly into PostgreSQL staging table via Binary Importer
+            string sqlColsSelect = string.Join(", ", safeColumns.Select(c => $"[{c.ColumnName}]"));
+            string pgColsList = string.Join(", ", safeColumns.Select(c => $"\"{c.ColumnName}\""));
+
+            using SqlCommand sqlCmd = new SqlCommand($"SELECT {sqlColsSelect} FROM [{tableName}]", sqlConn);
+            using SqlDataReader reader = await sqlCmd.ExecuteReaderAsync(ct);
+
+            int totalRows = 0;
+            if (reader.HasRows)
             {
-                string pgType = MapSqlTypeToPgType(col.DataType);
-                colDefs.Add($"\"{col.ColumnName}\" {pgType}");
+                using NpgsqlBinaryImporter writer = await pgConn.BeginBinaryImportAsync(
+                    $"COPY \"{stagingTable}\" ({pgColsList}) FROM BINARY;", 
+                    ct);
+
+                while (await reader.ReadAsync(ct))
+                {
+                    await writer.StartRowAsync(ct);
+                    for (int i = 0; i < safeColumns.Count; i++)
+                    {
+                        if (reader.IsDBNull(i))
+                        {
+                            await writer.WriteNullAsync(ct);
+                        }
+                        else
+                        {
+                            object val = reader.GetValue(i);
+                            await writer.WriteAsync(val, ct);
+                        }
+                    }
+                    totalRows++;
+                }
+
+                await writer.CompleteAsync(ct);
             }
-            pgCreateTableSql += string.Join(", ", colDefs) + ");";
-            
-            await pgConn.ExecuteAsync(pgCreateTableSql);
 
-            // 4. Fetch Data from SQL Server
-            string columnsCsv = string.Join(", ", safeColumns.Select(c => $"[{c.ColumnName}]"));
-            List<dynamic> data = (await sqlConn.QueryAsync($"SELECT {columnsCsv} FROM [{tableName}]")).ToList();
-
-            if (!data.Any()) return;
-
-            // 5. Truncate & Load (for simple sync, since we don't dynamically know primary keys easily here, truncation is safer for full sync. For prod, we can optimize to Upsert)
-            await pgConn.ExecuteAsync($"TRUNCATE TABLE \"{tableName}\"");
-
-            // Build dynamic insert
-            string insertCols = string.Join(", ", safeColumns.Select(c => $"\"{c.ColumnName}\""));
-            string insertParams = string.Join(", ", safeColumns.Select(c => $"@{c.ColumnName}"));
-            string insertSql = $"INSERT INTO \"{tableName}\" ({insertCols}) VALUES ({insertParams})";
-
-            // Insert rows (Using transaction for performance)
-            using IDbTransaction tx = pgConn.BeginTransaction();
-            foreach(dynamic row in data)
+            // 6. Zero-Downtime Atomic Swap: Truncate and transfer from staging inside a single transaction
+            using (DbTransaction tx = await pgConn.BeginTransactionAsync(ct))
             {
-                await pgConn.ExecuteAsync(insertSql, (object)row, transaction: tx);
+                await pgConn.ExecuteAsync(new CommandDefinition(
+                    $"TRUNCATE TABLE \"{tableName}\"; INSERT INTO \"{tableName}\" ({pgColsList}) SELECT {pgColsList} FROM \"{stagingTable}\";",
+                    transaction: tx,
+                    cancellationToken: ct));
+                await tx.CommitAsync(ct);
             }
-            tx.Commit();
+
+            _logger.LogInformation("Successfully synced {Count} rows for table '{TableName}'.", totalRows, tableName);
         }
 
-        private string MapSqlTypeToPgType(string sqlType)
+        private static string MapSqlTypeToPgType(string sqlType)
         {
             return sqlType.ToLower() switch
             {
@@ -144,13 +211,14 @@ namespace CaresPharma_Insights.Infrastructure.Data
                 "smallint" => "SMALLINT",
                 "tinyint" => "SMALLINT",
                 "bit" => "BOOLEAN",
-                "decimal" or "numeric" or "money" => "NUMERIC",
+                "decimal" or "numeric" or "money" or "smallmoney" => "NUMERIC",
                 "float" => "DOUBLE PRECISION",
                 "real" => "REAL",
                 "datetime" or "datetime2" or "smalldatetime" => "TIMESTAMP",
                 "date" => "DATE",
+                "time" => "TIME",
                 "uniqueidentifier" => "UUID",
-                _ => "TEXT" // varchar, nvarchar, char, etc.
+                _ => "TEXT"
             };
         }
 

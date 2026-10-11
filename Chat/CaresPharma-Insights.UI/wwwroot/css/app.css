@@ -137,6 +137,29 @@ body {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
+.new-chat-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: #ffffff;
+    color: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.new-chat-btn:hover {
+    background-color: #f1f5f9;
+    transform: translateY(-1px);
+}
+
 /* Chat Wrapper */
 .chat-wrapper {
     flex: 1;

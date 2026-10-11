@@ -1,14 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\CaresPharma-Insights.Application\CaresPharma-Insights.Application.csproj" />
     <ProjectReference Include="..\CaresPharma-Insights.Domain\CaresPharma-Insights.Domain.csproj" />
+    <ProjectReference Include="..\..\Shared\CaresPharma-Insights.Shared\CaresPharma-Insights.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.89" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.6" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.6" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
