@@ -41,15 +41,14 @@ jobs:
       # 6. Inject Secrets into published config
       - name: Inject Production Secrets
         shell: powershell
+        env:
+          RAW_GOOGLE_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
         run: |
           $configPath = "published/appsettings.json"
           if (Test-Path $configPath) {
             $json = Get-Content $configPath -Raw | ConvertFrom-Json
             if (-not $json.Google) { $json | Add-Member -MemberType NoteProperty -Name "Google" -Value ([PSCustomObject]@{}) }
-            $rawSecret = @"
-${{ secrets.GOOGLE_AI_API_KEY }}
-"@
-            $cleanSecret = $rawSecret.Trim().Replace("`r", "").Replace("`n", "").Replace("`0", "")
+            $cleanSecret = ($env:RAW_GOOGLE_KEY -replace "`r", "" -replace "`n", "").Trim()
             if ($cleanSecret -ne "") {
               $json.Google.ApiKey = $cleanSecret
             }
