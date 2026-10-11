@@ -228,7 +228,7 @@
         try
         {
             string? token = await Auth.GetTokenAsync();
-            string? cleanToken = !string.IsNullOrWhiteSpace(token) ? token.Trim().Trim('"') : null;
+            string? cleanToken = !string.IsNullOrWhiteSpace(token) ? token.Trim().Trim('"').Replace("\r", "").Replace("\n", "").Replace("\0", "") : null;
             if (!string.IsNullOrWhiteSpace(cleanToken))
             {
                 Auth.ApplyAuthorizationHeader(cleanToken);

@@ -46,8 +46,12 @@ jobs:
           if (Test-Path $configPath) {
             $json = Get-Content $configPath -Raw | ConvertFrom-Json
             if (-not $json.Google) { $json | Add-Member -MemberType NoteProperty -Name "Google" -Value ([PSCustomObject]@{}) }
-            if ("${{ secrets.GOOGLE_AI_API_KEY }}" -ne "") {
-              $json.Google.ApiKey = "${{ secrets.GOOGLE_AI_API_KEY }}"
+            $rawSecret = @"
+${{ secrets.GOOGLE_AI_API_KEY }}
+"@
+            $cleanSecret = $rawSecret.Trim().Replace("`r", "").Replace("`n", "").Replace("`0", "")
+            if ($cleanSecret -ne "") {
+              $json.Google.ApiKey = $cleanSecret
             }
             $json.Google.ModelId = "gemini-3.8-flash"
             $json | ConvertTo-Json -Depth 10 | Set-Content $configPath

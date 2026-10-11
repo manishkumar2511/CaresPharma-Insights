@@ -131,11 +131,14 @@ namespace CaresPharma_Insights.Api.Extensions
 
         public static IServiceCollection AddSemanticKernelAiServices(this IServiceCollection services, IConfiguration configuration)
         {
-            string geminiKey = configuration["Google:ApiKey"] 
+            string rawGeminiKey = configuration["Google:ApiKey"] 
                 ?? Environment.GetEnvironmentVariable("GOOGLE_AI_API_KEY")
                 ?? "demo-key";
 
-            string modelId = configuration["Google:ModelId"] ?? "gemini-3.8-flash";
+            string geminiKey = (rawGeminiKey ?? string.Empty).Trim().Replace("\r", "").Replace("\n", "").Replace("\0", "");
+
+            string rawModelId = configuration["Google:ModelId"] ?? "gemini-3.8-flash";
+            string modelId = (rawModelId ?? "gemini-3.8-flash").Trim().Replace("\r", "").Replace("\n", "").Replace("\0", "");
 
             services.AddScoped<SqlAnalyticsPlugin>();
             services.AddScoped<InsightsPlugin>();
