@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using CaresPharma_Insights.Api.Endpoints;
 using CaresPharma_Insights.Api.Extensions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -10,7 +11,8 @@ builder.Services
     .AddCorsPolicyServices(builder.Configuration)
     .AddAuthenticationAndAuthorizationServices(builder.Configuration)
     .AddPersistenceAndRepositoryServices(builder.Configuration)
-    .AddSemanticKernelAiServices(builder.Configuration);
+    .AddSemanticKernelAiServices(builder.Configuration)
+    .AddMcpServerServices();
 
 WebApplication app = builder.Build();
 
@@ -26,6 +28,7 @@ app.UseAuthorization();
 
 // Map route endpoints
 app.MapInsightsEndpoints();
+app.MapMcpEndpoints();
 
 // Initialize database connection and schemas
 await app.InitializeDatabaseAsync();
