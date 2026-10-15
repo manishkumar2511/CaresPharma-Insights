@@ -85,12 +85,12 @@ namespace CaresPharma_Insights.Api.Endpoints
             .WithSummary("Server-Sent Events endpoint for Claude and other MCP clients.")
             .AllowAnonymous();
 
-            // 2. POST /mcp/message - JSON-RPC Ingestion
-            endpoints.MapPost("/mcp/message", async (
+            // 2. POST /mcp & POST /mcp/message - JSON-RPC Ingestion
+            async Task<IResult> HandleMcpPost(
                 HttpContext httpContext,
                 IMcpSessionManager sessionManager,
                 IMcpProtocolService protocolService,
-                CancellationToken cancellationToken) =>
+                CancellationToken cancellationToken)
             {
                 string? sessionId = httpContext.Request.Query["sessionId"];
 
@@ -134,10 +134,17 @@ namespace CaresPharma_Insights.Api.Endpoints
                 }
 
                 return Results.Accepted();
-            })
-            .WithName("McpPostMessage")
-            .WithSummary("JSON-RPC message receiver endpoint for Claude MCP interactions.")
-            .AllowAnonymous();
+            }
+
+            endpoints.MapPost("/mcp", HandleMcpPost)
+                .WithName("McpPostRoot")
+                .WithSummary("JSON-RPC message receiver endpoint directly on /mcp.")
+                .AllowAnonymous();
+
+            endpoints.MapPost("/mcp/message", HandleMcpPost)
+                .WithName("McpPostMessage")
+                .WithSummary("JSON-RPC message receiver endpoint for Claude MCP interactions.")
+                .AllowAnonymous();
 
             return endpoints;
         }

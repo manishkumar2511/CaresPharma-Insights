@@ -97,7 +97,9 @@ namespace CaresPharma_Insights.Api.Extensions
                         "http://localhost:4200",
                         "https://dev-carespharma-insights.netlify.app", 
                         "https://carespharma-insights.netlify.app",
-                        "https://carespharma.com"
+                        "https://carespharma.com",
+                        "https://claude.ai",
+                        "https://*.claude.ai"
                     };
 
                     string[]? configOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
