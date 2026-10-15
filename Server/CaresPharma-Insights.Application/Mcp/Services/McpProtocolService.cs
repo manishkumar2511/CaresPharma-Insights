@@ -9,12 +9,15 @@ namespace CaresPharma_Insights.Application.Mcp.Services
 {
     public interface IMcpProtocolService
     {
-        Task<McpJsonRpcResponse?> HandleMessageAsync(McpJsonRpcRequest request, CancellationToken cancellationToken);
+        Task<McpJsonRpcResponse?> HandleMessageAsync(
+            McpJsonRpcRequest request, 
+            CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext, 
+            CancellationToken cancellationToken);
     }
 
     /// <summary>
     /// Core JSON-RPC 2.0 dispatcher implementing the Model Context Protocol (MCP) specification.
-    /// Handles initialize, tools/list, and tools/call seamlessly.
+    /// Handles initialize, tools/list, and tools/call seamlessly with tenant security isolation.
     /// </summary>
     public sealed class McpProtocolService : IMcpProtocolService
     {
@@ -29,14 +32,18 @@ namespace CaresPharma_Insights.Application.Mcp.Services
             _logger = logger;
         }
 
-        public async Task<McpJsonRpcResponse?> HandleMessageAsync(McpJsonRpcRequest request, CancellationToken cancellationToken)
+        public async Task<McpJsonRpcResponse?> HandleMessageAsync(
+            McpJsonRpcRequest request, 
+            CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext, 
+            CancellationToken cancellationToken)
         {
             if (request == null)
             {
                 return McpJsonRpcResponse.Fail(null, -32600, "Invalid Request");
             }
 
-            _logger.LogInformation("Processing MCP JSON-RPC method: {Method}, ID: {Id}", request.Method, request.Id);
+            _logger.LogInformation("Processing MCP JSON-RPC method: {Method}, ID: {Id}, Tenant: {TenantId}", 
+                request.Method, request.Id, tenantContext?.PharmacyOwnerId ?? "None");
 
             switch (request.Method)
             {
@@ -91,7 +98,7 @@ namespace CaresPharma_Insights.Application.Mcp.Services
                         arguments = argsProp;
                     }
 
-                    McpCallToolResult callResult = await _toolHandler.ExecuteToolAsync(toolName, arguments, cancellationToken);
+                    McpCallToolResult callResult = await _toolHandler.ExecuteToolAsync(toolName, arguments, tenantContext, cancellationToken);
                     return McpJsonRpcResponse.Success(request.Id, callResult);
                 }
 

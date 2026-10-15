@@ -22,22 +22,74 @@ namespace CaresPharma_Insights.Api.Endpoints
 
         public static IEndpointRouteBuilder MapMcpEndpoints(this IEndpointRouteBuilder endpoints)
         {
+            // 0. POST /api/mcp/connect-token - Generates short-lived 1-Click Connect Token for Portal Users
+            endpoints.MapPost("/api/mcp/connect-token", (
+                HttpContext httpContext,
+                IMcpHandshakeTokenService tokenService) =>
+            {
+                var user = httpContext.User;
+                string? pharmacyOwnerId = user.FindFirst("pharmacyOwnerId")?.Value 
+                    ?? user.FindFirst("ownerId")?.Value;
+                string userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                    ?? user.FindFirst("sub")?.Value 
+                    ?? "anonymous-user";
+                string role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "PharmacyOwner";
+
+                if (string.IsNullOrWhiteSpace(pharmacyOwnerId) && !string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new { error = "Unable to resolve pharmacy tenant identity from current user context." });
+                }
+
+                // If SuperAdmin, pharmacyOwnerId can be null
+                var handshakeToken = tokenService.GenerateToken(pharmacyOwnerId ?? "superadmin", userId, role);
+                string connectUrl = $"https://dev-carespharma-insights.runasp.net/mcp?token={handshakeToken.Token}";
+
+                return Results.Ok(new
+                {
+                    token = handshakeToken.Token,
+                    expiresAtUtc = handshakeToken.ExpiresAtUtc,
+                    connectUrl = connectUrl,
+                    claudeDeepLink = $"https://claude.ai/customize/connectors?url={Uri.EscapeDataString(connectUrl)}"
+                });
+            })
+            .WithName("GenerateMcpConnectToken")
+            .WithSummary("Issues a secure 1-Click handshake token for the authenticated pharmacy owner.")
+            .RequireAuthorization();
+
             // 1. GET /mcp - Server-Sent Events (SSE) Stream
             endpoints.MapGet("/mcp", async (
                 HttpContext httpContext,
                 IMcpSessionManager sessionManager,
+                IMcpHandshakeTokenService tokenService,
                 ILoggerFactory loggerFactory,
                 CancellationToken cancellationToken) =>
             {
                 var logger = loggerFactory.CreateLogger("McpEndpoints.SSE");
                 string sessionId = Guid.NewGuid().ToString("N");
+                string? token = httpContext.Request.Query["token"].FirstOrDefault() 
+                    ?? httpContext.Request.Query["sessionToken"].FirstOrDefault();
+
+                CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext = null;
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    tenantContext = tokenService.ValidateAndClaimToken(token);
+                    if (tenantContext != null)
+                    {
+                        logger.LogInformation("1-Click Claude handshake validated successfully. Tenant: {TenantId}, Role: {Role}", 
+                            tenantContext.PharmacyOwnerId, tenantContext.UserRole);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Invalid or expired 1-Click token provided: {Token}", token);
+                    }
+                }
 
                 httpContext.Response.Headers.Append("Content-Type", "text/event-stream");
                 httpContext.Response.Headers.Append("Cache-Control", "no-cache, no-transform");
                 httpContext.Response.Headers.Append("Connection", "keep-alive");
                 httpContext.Response.Headers.Append("X-Accel-Buffering", "no");
 
-                var reader = sessionManager.CreateSession(sessionId);
+                var reader = sessionManager.CreateSession(sessionId, tenantContext);
                 logger.LogInformation("New MCP SSE client connected. SessionId: {SessionId}", sessionId);
 
                 try
@@ -117,7 +169,11 @@ namespace CaresPharma_Insights.Api.Endpoints
                     return Results.BadRequest(McpJsonRpcResponse.Fail(null, -32600, "Invalid JSON-RPC request"));
                 }
 
-                McpJsonRpcResponse? response = await protocolService.HandleMessageAsync(request, cancellationToken);
+                // Resolve tenant context bound to this active session
+                CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext = 
+                    !string.IsNullOrEmpty(sessionId) ? sessionManager.GetSessionTenantContext(sessionId) : null;
+
+                McpJsonRpcResponse? response = await protocolService.HandleMessageAsync(request, tenantContext, cancellationToken);
 
                 if (response != null)
                 {

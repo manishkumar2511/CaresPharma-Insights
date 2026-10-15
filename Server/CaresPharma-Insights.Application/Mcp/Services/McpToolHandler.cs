@@ -4,18 +4,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using CaresPharma_Insights.Application.Mcp.Models;
 using CaresPharma_Insights.Domain.Interfaces;
+using CaresPharma_Insights.Domain.Models;
 
 namespace CaresPharma_Insights.Application.Mcp.Services
 {
     public interface IMcpToolHandler
     {
         IReadOnlyList<McpToolDefinition> GetToolDefinitions();
-        Task<McpCallToolResult> ExecuteToolAsync(string toolName, JsonElement? arguments, CancellationToken cancellationToken);
+        Task<McpCallToolResult> ExecuteToolAsync(
+            string toolName, 
+            JsonElement? arguments, 
+            TenantSecurityContext? tenantContext, 
+            CancellationToken cancellationToken);
     }
 
     /// <summary>
     /// Enterprise MCP Tool Handler exposing CaresPharma analytics and schema introspection.
-    /// Strictly leverages existing repository interfaces with read-only execution guardrails.
+    /// Strictly leverages existing repository interfaces with read-only execution guardrails and tenant boundaries.
     /// </summary>
     public sealed class McpToolHandler : IMcpToolHandler
     {
@@ -63,6 +68,7 @@ namespace CaresPharma_Insights.Application.Mcp.Services
         public async Task<McpCallToolResult> ExecuteToolAsync(
             string toolName, 
             JsonElement? arguments, 
+            TenantSecurityContext? tenantContext,
             CancellationToken cancellationToken)
         {
             try
@@ -92,11 +98,14 @@ namespace CaresPharma_Insights.Application.Mcp.Services
                                 IsError: true);
                         }
 
-                        // Execute query with safety enforcement
+                        // Execute query with tenant safety boundary enforcement
+                        string? tenantId = tenantContext?.PharmacyOwnerId;
+                        string? userRole = tenantContext?.UserRole;
+
                         string resultJson = await _dataRepository.ExecuteReadOnlyQueryAsync(
                             sql, 
-                            tenantId: null, 
-                            userRole: null, 
+                            tenantId: tenantId, 
+                            userRole: userRole, 
                             maxRows: 50, 
                             cancellationToken: cancellationToken);
 

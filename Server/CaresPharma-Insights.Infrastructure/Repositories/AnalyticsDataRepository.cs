@@ -130,6 +130,40 @@ namespace CaresPharma_Insights.Infrastructure.Repositories
                 }
             }
 
+            // 2. Multi-tenant isolation: If tenantId is specified and user is not SuperAdmin, enforce tenant filter
+            if (!string.IsNullOrWhiteSpace(tenantId) && !string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Enforcing tenant boundary for TenantId: {TenantId}, Role: {Role}", tenantId, userRole);
+                string[] tenantTables = new string[] { "Medicines", "Sales", "Orders", "Customers", "Inventory", "Prescriptions", "Staff" };
+                
+                foreach (string tbl in tenantTables)
+                {
+                    if (Regex.IsMatch(clean, $@"\b{tbl}\b", RegexOptions.IgnoreCase) &&
+                        !clean.Contains("PharmacyOwnerId", StringComparison.OrdinalIgnoreCase) &&
+                        !clean.Contains("TenantId", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Check if WHERE clause exists
+                        if (Regex.IsMatch(clean, @"\bWHERE\b", RegexOptions.IgnoreCase))
+                        {
+                            clean = Regex.Replace(clean, @"\bWHERE\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') AND ", RegexOptions.IgnoreCase);
+                        }
+                        else if (Regex.IsMatch(clean, @"\bGROUP\s+BY\b", RegexOptions.IgnoreCase))
+                        {
+                            clean = Regex.Replace(clean, @"\bGROUP\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') GROUP BY", RegexOptions.IgnoreCase);
+                        }
+                        else if (Regex.IsMatch(clean, @"\bORDER\s+BY\b", RegexOptions.IgnoreCase))
+                        {
+                            clean = Regex.Replace(clean, @"\bORDER\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') ORDER BY", RegexOptions.IgnoreCase);
+                        }
+                        else
+                        {
+                            clean += $" WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}')";
+                        }
+                        break;
+                    }
+                }
+            }
+
             // Guard against unbounded memory consumption by enforcing LIMIT
             if (!Regex.IsMatch(clean, @"\bLIMIT\b", RegexOptions.IgnoreCase))
             {
