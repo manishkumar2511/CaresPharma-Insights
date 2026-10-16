@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using CaresPharma_Insights.Application.Mcp.Models;
 using CaresPharma_Insights.Application.Mcp.Services;
+using CaresPharma_Insights.Domain.Models;
 
 namespace CaresPharma_Insights.Api.Endpoints
 {
@@ -202,12 +203,13 @@ namespace CaresPharma_Insights.Api.Endpoints
             async Task<IResult> HandleMcpPost(
                 HttpContext httpContext,
                 IMcpSessionManager sessionManager,
+                IMcpHandshakeTokenService tokenService,
                 IMcpProtocolService protocolService,
                 CancellationToken cancellationToken)
             {
                 string? sessionId = httpContext.Request.Query["sessionId"];
 
-                using var streamReader = new StreamReader(httpContext.Request.Body);
+                using StreamReader streamReader = new StreamReader(httpContext.Request.Body);
                 string rawBody = await streamReader.ReadToEndAsync(cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(rawBody))
@@ -230,9 +232,19 @@ namespace CaresPharma_Insights.Api.Endpoints
                     return Results.BadRequest(McpJsonRpcResponse.Fail(null, -32600, "Invalid JSON-RPC request"));
                 }
 
-                // Resolve tenant context bound to this active session
-                CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext = 
+                // Resolve tenant context bound to this active session, with fallback to Bearer token
+                TenantSecurityContext? tenantContext = 
                     !string.IsNullOrEmpty(sessionId) ? sessionManager.GetSessionTenantContext(sessionId) : null;
+
+                if (tenantContext == null)
+                {
+                    string? authHeader = httpContext.Request.Headers.Authorization.FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string token = authHeader[7..].Trim();
+                        tenantContext = tokenService.ValidateAndClaimToken(token);
+                    }
+                }
 
                 McpJsonRpcResponse? response = await protocolService.HandleMessageAsync(request, tenantContext, cancellationToken);
 

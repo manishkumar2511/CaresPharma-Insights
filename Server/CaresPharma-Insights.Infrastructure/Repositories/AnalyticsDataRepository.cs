@@ -134,7 +134,11 @@ namespace CaresPharma_Insights.Infrastructure.Repositories
             if (!string.IsNullOrWhiteSpace(tenantId) && !string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogInformation("Enforcing tenant boundary for TenantId: {TenantId}, Role: {Role}", tenantId, userRole);
-                string[] tenantTables = new string[] { "Medicines", "Sales", "Orders", "Customers", "Inventory", "Prescriptions", "Staff" };
+                string[] tenantTables = new string[] { 
+                    "Batches", "Batch", "Inventories", "Inventory", 
+                    "Invoices", "Invoice", "Medicines", "Medicine", 
+                    "Sales", "Orders", "Customers", "Prescriptions", "Staff" 
+                };
                 
                 foreach (string tbl in tenantTables)
                 {
@@ -189,6 +193,212 @@ namespace CaresPharma_Insights.Infrastructure.Repositories
 
             string query = "SELECT COUNT(*) FROM \"Users\";";
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(query, cancellationToken: cancellationToken));
+        }
+
+        public async Task<string> GetTenantCurrentStockAsync(string tenantId, CancellationToken cancellationToken = default)
+        {
+            using IDbConnection connection = await _dbConnectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT 
+                    m.""Name"" AS ""MedicineName"",
+                    m.""Category"",
+                    i.""RackNo"",
+                    b.""BatchNo"",
+                    b.""Quantity"",
+                    b.""PurchasePrice"",
+                    b.""SellingPrice"",
+                    b.""Mrp"",
+                    b.""ExpiryDate""
+                FROM ""Batches"" b
+                INNER JOIN ""Inventories"" i ON b.""InventoryId"" = i.""Id""
+                INNER JOIN ""Medicines"" m ON i.""MedicineId"" = m.""Id""
+                WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                ORDER BY m.""Name"" ASC, b.""ExpiryDate"" ASC
+                LIMIT 100;
+            ";
+
+            try
+            {
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(sql, new { TenantId = tenantId }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed querying Inventories table directly, trying fallback with singular table name");
+                const string fallbackSql = @"
+                    SELECT 
+                        m.""Name"" AS ""MedicineName"",
+                        m.""Category"",
+                        i.""RackNo"",
+                        b.""BatchNo"",
+                        b.""Quantity"",
+                        b.""PurchasePrice"",
+                        b.""SellingPrice"",
+                        b.""Mrp"",
+                        b.""ExpiryDate""
+                    FROM ""Batch"" b
+                    INNER JOIN ""Inventory"" i ON b.""InventoryId"" = i.""Id""
+                    INNER JOIN ""Medicine"" m ON i.""MedicineId"" = m.""Id""
+                    WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                    ORDER BY m.""Name"" ASC, b.""ExpiryDate"" ASC
+                    LIMIT 100;
+                ";
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(fallbackSql, new { TenantId = tenantId }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+        }
+
+        public async Task<string> GetTenantExpiringMedicinesAsync(string tenantId, int daysThreshold = 90, CancellationToken cancellationToken = default)
+        {
+            using IDbConnection connection = await _dbConnectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT 
+                    m.""Name"" AS ""MedicineName"",
+                    m.""Category"",
+                    b.""BatchNo"",
+                    b.""Quantity"",
+                    b.""SellingPrice"",
+                    b.""ExpiryDate"",
+                    ROUND(CAST(EXTRACT(DAY FROM (b.""ExpiryDate"" - CURRENT_DATE)) AS numeric), 0) AS ""DaysUntilExpiry""
+                FROM ""Batches"" b
+                INNER JOIN ""Inventories"" i ON b.""InventoryId"" = i.""Id""
+                INNER JOIN ""Medicines"" m ON i.""MedicineId"" = m.""Id""
+                WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                  AND b.""ExpiryDate"" <= (CURRENT_DATE + (@DaysThreshold * INTERVAL '1 day'))
+                  AND b.""Quantity"" > 0
+                ORDER BY b.""ExpiryDate"" ASC
+                LIMIT 100;
+            ";
+
+            try
+            {
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(sql, new { TenantId = tenantId, DaysThreshold = daysThreshold }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Fallback querying expiring medicines on singular table");
+                const string fallbackSql = @"
+                    SELECT 
+                        m.""Name"" AS ""MedicineName"",
+                        m.""Category"",
+                        b.""BatchNo"",
+                        b.""Quantity"",
+                        b.""SellingPrice"",
+                        b.""ExpiryDate"",
+                        ROUND(CAST(EXTRACT(DAY FROM (b.""ExpiryDate"" - CURRENT_DATE)) AS numeric), 0) AS ""DaysUntilExpiry""
+                    FROM ""Batch"" b
+                    INNER JOIN ""Inventory"" i ON b.""InventoryId"" = i.""Id""
+                    INNER JOIN ""Medicine"" m ON i.""MedicineId"" = m.""Id""
+                    WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                      AND b.""ExpiryDate"" <= (CURRENT_DATE + (@DaysThreshold * INTERVAL '1 day'))
+                      AND b.""Quantity"" > 0
+                    ORDER BY b.""ExpiryDate"" ASC
+                    LIMIT 100;
+                ";
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(fallbackSql, new { TenantId = tenantId, DaysThreshold = daysThreshold }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+        }
+
+        public async Task<string> GetTenantSalesSummaryAsync(string tenantId, int days = 30, CancellationToken cancellationToken = default)
+        {
+            using IDbConnection connection = await _dbConnectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT 
+                    COUNT(inv.""Id"") AS ""TotalInvoices"",
+                    COALESCE(SUM(inv.""GrandTotal""), 0) AS ""TotalRevenue"",
+                    COALESCE(SUM(inv.""ReceivedAmount""), 0) AS ""TotalReceived"",
+                    COALESCE(SUM(inv.""BalanceDue""), 0) AS ""TotalBalanceDue"",
+                    COUNT(DISTINCT inv.""CustomerName"") AS ""UniqueCustomers""
+                FROM ""Invoices"" inv
+                WHERE inv.""PharmacyOwnerId"" = @TenantId::uuid
+                  AND inv.""BillingDate"" >= (CURRENT_DATE - (@Days * INTERVAL '1 day'));
+            ";
+
+            try
+            {
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(sql, new { TenantId = tenantId, Days = days }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Fallback querying sales summary on singular table");
+                const string fallbackSql = @"
+                    SELECT 
+                        COUNT(inv.""Id"") AS ""TotalInvoices"",
+                        COALESCE(SUM(inv.""GrandTotal""), 0) AS ""TotalRevenue"",
+                        COALESCE(SUM(inv.""ReceivedAmount""), 0) AS ""TotalReceived"",
+                        COALESCE(SUM(inv.""BalanceDue""), 0) AS ""TotalBalanceDue"",
+                        COUNT(DISTINCT inv.""CustomerName"") AS ""UniqueCustomers""
+                    FROM ""Invoice"" inv
+                    WHERE inv.""PharmacyOwnerId"" = @TenantId::uuid
+                      AND inv.""BillingDate"" >= (CURRENT_DATE - (@Days * INTERVAL '1 day'));
+                ";
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(fallbackSql, new { TenantId = tenantId, Days = days }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+        }
+
+        public async Task<string> GetTenantLowStockMedicinesAsync(string tenantId, int threshold = 10, CancellationToken cancellationToken = default)
+        {
+            using IDbConnection connection = await _dbConnectionFactory.CreateConnectionAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT 
+                    m.""Name"" AS ""MedicineName"",
+                    m.""Category"",
+                    i.""RackNo"",
+                    b.""BatchNo"",
+                    b.""Quantity"" AS ""RemainingUnits"",
+                    b.""SellingPrice""
+                FROM ""Batches"" b
+                INNER JOIN ""Inventories"" i ON b.""InventoryId"" = i.""Id""
+                INNER JOIN ""Medicines"" m ON i.""MedicineId"" = m.""Id""
+                WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                  AND b.""Quantity"" <= @Threshold
+                ORDER BY b.""Quantity"" ASC
+                LIMIT 50;
+            ";
+
+            try
+            {
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(sql, new { TenantId = tenantId, Threshold = threshold }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Fallback querying low stock medicines on singular table");
+                const string fallbackSql = @"
+                    SELECT 
+                        m.""Name"" AS ""MedicineName"",
+                        m.""Category"",
+                        i.""RackNo"",
+                        b.""BatchNo"",
+                        b.""Quantity"" AS ""RemainingUnits"",
+                        b.""SellingPrice""
+                    FROM ""Batch"" b
+                    INNER JOIN ""Inventory"" i ON b.""InventoryId"" = i.""Id""
+                    INNER JOIN ""Medicine"" m ON i.""MedicineId"" = m.""Id""
+                    WHERE b.""PharmacyOwnerId"" = @TenantId::uuid
+                      AND b.""Quantity"" <= @Threshold
+                    ORDER BY b.""Quantity"" ASC
+                    LIMIT 50;
+                ";
+                IEnumerable<dynamic> rows = await connection.QueryAsync<dynamic>(
+                    new CommandDefinition(fallbackSql, new { TenantId = tenantId, Threshold = threshold }, cancellationToken: cancellationToken));
+                return JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = false });
+            }
         }
     }
 }
