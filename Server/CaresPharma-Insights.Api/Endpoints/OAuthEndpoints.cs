@@ -9,18 +9,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using CaresPharma_Insights.Application.Mcp.Services;
 using CaresPharma_Insights.Domain.Models;
+using CaresPharma_Insights.Shared.Dtos;
 
 namespace CaresPharma_Insights.Api.Endpoints
 {
-    public sealed record OAuthTokenResponse(
-        string access_token,
-        string token_type,
-        int expires_in
-    );
-
     /// <summary>
     /// Implements RFC 6749 & RFC 7636 OAuth 2.1 Authorization Code Flow with PKCE for Claude.ai Custom Connectors.
-    /// Handles /authorize, /oauth/token, and RFC 8414 OAuth Authorization Server Metadata.
+    /// Strictly typed with zero var usage and separate DTO classes.
     /// </summary>
     public static class OAuthEndpoints
     {
@@ -37,10 +32,10 @@ namespace CaresPharma_Insights.Api.Endpoints
                     issuer = baseUrl,
                     authorization_endpoint = $"{baseUrl}/authorize",
                     token_endpoint = $"{baseUrl}/oauth/token",
-                    response_types_supported = new[] { "code" },
-                    grant_types_supported = new[] { "authorization_code" },
-                    code_challenge_methods_supported = new[] { "S256" },
-                    token_endpoint_auth_methods_supported = new[] { "none", "client_secret_basic", "client_secret_post" }
+                    response_types_supported = new string[] { "code" },
+                    grant_types_supported = new string[] { "authorization_code" },
+                    code_challenge_methods_supported = new string[] { "S256" },
+                    token_endpoint_auth_methods_supported = new string[] { "none", "client_secret_basic", "client_secret_post" }
                 });
             })
             .AllowAnonymous();
@@ -52,7 +47,7 @@ namespace CaresPharma_Insights.Api.Endpoints
                 return Results.Ok(new
                 {
                     resource = $"{baseUrl}/mcp",
-                    authorization_servers = new[] { baseUrl }
+                    authorization_servers = new string[] { baseUrl }
                 });
             })
             .AllowAnonymous();
@@ -116,7 +111,7 @@ namespace CaresPharma_Insights.Api.Endpoints
 
                 if (string.Equals(grantType, "authorization_code", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.IsNullOrWhiteSpace(code) || !AuthCodes.TryRemove(code, out var authData))
+                    if (string.IsNullOrWhiteSpace(code) || !AuthCodes.TryRemove(code, out (string ClientId, string CodeChallenge, string? Resource, DateTime ExpiresAtUtc) authData))
                     {
                         return Results.BadRequest(new { error = "invalid_grant", error_description = "Authorization code is invalid or expired." });
                     }
@@ -147,7 +142,7 @@ namespace CaresPharma_Insights.Api.Endpoints
                 }
 
                 // Issue high-trust token bound to the verified tenant
-                var handshakeToken = tokenService.GenerateToken(
+                McpHandshakeToken handshakeToken = tokenService.GenerateToken(
                     pharmacyOwnerId: clientId,
                     userId: clientId,
                     userRole: "PharmacyOwner"
