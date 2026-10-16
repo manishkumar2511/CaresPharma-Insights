@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using CaresPharma_Insights.Application.Mcp.Services;
+using CaresPharma_Insights.Domain.Interfaces;
 using CaresPharma_Insights.Domain.Models;
 using CaresPharma_Insights.Shared.Dtos;
 
@@ -93,7 +94,7 @@ namespace CaresPharma_Insights.Api.Endpoints
             // 4. POST /oauth/token & POST /token - Token Exchange Endpoint
             async Task<IResult> HandleTokenExchange(
                 HttpContext ctx,
-                ITenantMcpAuthService authService,
+                ITenantMcpClientRepository mcpRepo,
                 IMcpHandshakeTokenService tokenService,
                 ILoggerFactory loggerFactory,
                 CancellationToken cancellationToken)
@@ -141,10 +142,23 @@ namespace CaresPharma_Insights.Api.Endpoints
                     clientId = !string.IsNullOrWhiteSpace(clientId) ? clientId : authData.ClientId;
                 }
 
+                // Resolve real PharmacyOwnerId from the registered ClientId
+                string pharmacyOwnerId = clientId;
+                TenantMcpClient? clientRecord = await mcpRepo.GetByClientIdAsync(clientId, cancellationToken);
+                if (clientRecord != null)
+                {
+                    pharmacyOwnerId = clientRecord.PharmacyOwnerId;
+                    logger.LogInformation("Resolved ClientId: {ClientId} to real PharmacyOwnerId: {PharmacyOwnerId}", clientId, pharmacyOwnerId);
+                }
+                else
+                {
+                    logger.LogWarning("No DB record found for ClientId: {ClientId}. Using fallback.", clientId);
+                }
+
                 // Issue high-trust token bound to the verified tenant
                 McpHandshakeToken handshakeToken = tokenService.GenerateToken(
-                    pharmacyOwnerId: clientId,
-                    userId: clientId,
+                    pharmacyOwnerId: pharmacyOwnerId,
+                    userId: pharmacyOwnerId,
                     userRole: "PharmacyOwner"
                 );
 
