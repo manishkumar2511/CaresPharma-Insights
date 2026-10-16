@@ -13,11 +13,14 @@ namespace CaresPharma_Insights.Application.Mcp.Services
         TenantSecurityContext? GetSessionTenantContext(string sessionId);
         bool TryPostMessage(string sessionId, string message);
         void RemoveSession(string sessionId);
+        int TerminateSessionsForTenant(string pharmacyOwnerId);
+        int GetActiveSessionCount();
+        System.Collections.Generic.IReadOnlyDictionary<string, int> GetActiveTenantSessionCounts();
     }
 
     /// <summary>
     /// Thread-safe high-throughput session manager maintaining SSE message streams for connected MCP clients.
-    /// Associates active client sessions with their verified TenantSecurityContext.
+    /// Associates active client sessions with their verified TenantSecurityContext and provides immediate kill-switch termination.
     /// </summary>
     public sealed class McpSessionManager : IMcpSessionManager
     {
@@ -76,6 +79,41 @@ namespace CaresPharma_Insights.Application.Mcp.Services
             }
 
             _tenantContexts.TryRemove(sessionId, out _);
+        }
+
+        /// <summary>
+        /// Instantly terminates all active MCP SSE channels associated with a given pharmacy owner (Instant Kill Switch).
+        /// </summary>
+        public int TerminateSessionsForTenant(string pharmacyOwnerId)
+        {
+            if (string.IsNullOrWhiteSpace(pharmacyOwnerId)) return 0;
+
+            int terminated = 0;
+            foreach (var kvp in _tenantContexts)
+            {
+                if (string.Equals(kvp.Value.PharmacyOwnerId, pharmacyOwnerId, StringComparison.OrdinalIgnoreCase))
+                {
+                    string sessionId = kvp.Key;
+                    TryPostMessage(sessionId, "event: error\r\ndata: {\"error\":\"Access revoked by administrator\"}\r\n\r\n");
+                    RemoveSession(sessionId);
+                    terminated++;
+                }
+            }
+
+            return terminated;
+        }
+
+        public int GetActiveSessionCount() => _sessions.Count;
+
+        public System.Collections.Generic.IReadOnlyDictionary<string, int> GetActiveTenantSessionCounts()
+        {
+            var counts = new System.Collections.Generic.Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in _tenantContexts)
+            {
+                string tenantId = kvp.Value.PharmacyOwnerId ?? "superadmin";
+                counts[tenantId] = counts.TryGetValue(tenantId, out int c) ? c + 1 : 1;
+            }
+            return counts;
         }
     }
 }

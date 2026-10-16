@@ -61,26 +61,82 @@ namespace CaresPharma_Insights.Api.Endpoints
                 HttpContext httpContext,
                 IMcpSessionManager sessionManager,
                 IMcpHandshakeTokenService tokenService,
+                ITenantMcpAuthService authService,
                 ILoggerFactory loggerFactory,
                 CancellationToken cancellationToken) =>
             {
                 var logger = loggerFactory.CreateLogger("McpEndpoints.SSE");
                 string sessionId = Guid.NewGuid().ToString("N");
-                string? token = httpContext.Request.Query["token"].FirstOrDefault() 
-                    ?? httpContext.Request.Query["sessionToken"].FirstOrDefault();
+
+                // 1. Check for Persistent Client Credentials (ClientId & ClientSecret)
+                string? clientId = httpContext.Request.Query["clientId"].FirstOrDefault() 
+                    ?? httpContext.Request.Query["client_id"].FirstOrDefault()
+                    ?? httpContext.Request.Headers["X-Client-Id"].FirstOrDefault();
+
+                string? clientSecret = httpContext.Request.Query["clientSecret"].FirstOrDefault() 
+                    ?? httpContext.Request.Query["client_secret"].FirstOrDefault()
+                    ?? httpContext.Request.Headers["X-Client-Secret"].FirstOrDefault();
+
+                // Also inspect standard HTTP Basic Authorization header (often sent by OAuth/MCP clients)
+                string? authHeader = httpContext.Request.Headers["Authorization"].FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        string credentials = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(authHeader[6..].Trim()));
+                        int colonIndex = credentials.IndexOf(':');
+                        if (colonIndex > 0)
+                        {
+                            clientId = credentials[..colonIndex];
+                            clientSecret = credentials[(colonIndex + 1)..];
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogDebug("Failed parsing Basic Auth header: {Msg}", ex.Message);
+                    }
+                }
+
+                string? ipAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+                string? userAgent = httpContext.Request.Headers.UserAgent.FirstOrDefault();
 
                 CaresPharma_Insights.Domain.Models.TenantSecurityContext? tenantContext = null;
-                if (!string.IsNullOrWhiteSpace(token))
+
+                if (!string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret))
                 {
-                    tenantContext = tokenService.ValidateAndClaimToken(token);
+                    tenantContext = await authService.ValidateCredentialsAsync(
+                        clientId, clientSecret, ipAddress, userAgent, cancellationToken);
+
                     if (tenantContext != null)
                     {
-                        logger.LogInformation("1-Click Claude handshake validated successfully. Tenant: {TenantId}, Role: {Role}", 
-                            tenantContext.PharmacyOwnerId, tenantContext.UserRole);
+                        logger.LogInformation("Enterprise Client Credentials validated for Tenant: {TenantId}", tenantContext.PharmacyOwnerId);
                     }
                     else
                     {
-                        logger.LogWarning("Invalid or expired 1-Click token provided: {Token}", token);
+                        logger.LogWarning("Invalid MCP Client Credentials rejected for ClientId: {ClientId}", clientId);
+                        httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        await httpContext.Response.WriteAsync("{\"error\":\"Invalid or revoked MCP Client Credentials.\"}", cancellationToken);
+                        return;
+                    }
+                }
+                else
+                {
+                    // 2. Fallback to 1-Click Handshake Token if provided
+                    string? token = httpContext.Request.Query["token"].FirstOrDefault() 
+                        ?? httpContext.Request.Query["sessionToken"].FirstOrDefault();
+
+                    if (!string.IsNullOrWhiteSpace(token))
+                    {
+                        tenantContext = tokenService.ValidateAndClaimToken(token);
+                        if (tenantContext != null)
+                        {
+                            logger.LogInformation("1-Click Claude handshake validated successfully. Tenant: {TenantId}, Role: {Role}", 
+                                tenantContext.PharmacyOwnerId, tenantContext.UserRole);
+                        }
+                        else
+                        {
+                            logger.LogWarning("Invalid or expired 1-Click token provided: {Token}", token);
+                        }
                     }
                 }
 

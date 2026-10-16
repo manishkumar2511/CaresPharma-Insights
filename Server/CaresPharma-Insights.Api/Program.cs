@@ -29,6 +29,7 @@ app.UseAuthorization();
 // Map route endpoints
 app.MapInsightsEndpoints();
 app.MapMcpEndpoints();
+app.MapAdminMcpEndpoints();
 
 // Initialize database connection and schemas
 await app.InitializeDatabaseAsync();

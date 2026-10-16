@@ -126,6 +126,7 @@ namespace CaresPharma_Insights.Api.Extensions
             services.AddSingleton<IDbConnectionFactory, AppDbConnectionFactory>();
             services.AddSingleton<IAnalyticsDataRepository, AnalyticsDataRepository>();
             services.AddSingleton<IConversationRepository, ConversationRepository>();
+            services.AddSingleton<ITenantMcpClientRepository, TenantMcpClientRepository>();
             services.AddTransient<DbInitializer>();
             services.AddHostedService<DataSyncWorker>();
             return services;

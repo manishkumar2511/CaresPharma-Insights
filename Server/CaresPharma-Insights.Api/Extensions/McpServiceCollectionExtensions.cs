@@ -10,6 +10,7 @@ namespace CaresPharma_Insights.Api.Extensions
             // Register singleton session manager to manage active client SSE channels
             services.AddSingleton<IMcpSessionManager, McpSessionManager>();
             services.AddSingleton<IMcpHandshakeTokenService, McpHandshakeTokenService>();
+            services.AddScoped<ITenantMcpAuthService, TenantMcpAuthService>();
 
             // Register MCP domain tool handlers and protocol processors
             services.AddScoped<IMcpToolHandler, McpToolHandler>();
