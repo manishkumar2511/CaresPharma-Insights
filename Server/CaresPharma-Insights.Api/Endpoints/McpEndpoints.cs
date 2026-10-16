@@ -121,21 +121,26 @@ namespace CaresPharma_Insights.Api.Endpoints
                 }
                 else
                 {
-                    // 2. Fallback to 1-Click Handshake Token if provided
+                    // 2. Fallback to 1-Click Handshake Token or OAuth Bearer token
                     string? token = httpContext.Request.Query["token"].FirstOrDefault() 
                         ?? httpContext.Request.Query["sessionToken"].FirstOrDefault();
+
+                    if (string.IsNullOrWhiteSpace(token) && !string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        token = authHeader[7..].Trim();
+                    }
 
                     if (!string.IsNullOrWhiteSpace(token))
                     {
                         tenantContext = tokenService.ValidateAndClaimToken(token);
                         if (tenantContext != null)
                         {
-                            logger.LogInformation("1-Click Claude handshake validated successfully. Tenant: {TenantId}, Role: {Role}", 
+                            logger.LogInformation("Bearer/1-Click Claude handshake validated successfully. Tenant: {TenantId}, Role: {Role}", 
                                 tenantContext.PharmacyOwnerId, tenantContext.UserRole);
                         }
                         else
                         {
-                            logger.LogWarning("Invalid or expired 1-Click token provided: {Token}", token);
+                            logger.LogWarning("Invalid or expired Bearer/1-Click token provided: {Token}", token);
                         }
                     }
                 }
