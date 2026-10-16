@@ -165,8 +165,17 @@ namespace CaresPharma_Insights.Api.Endpoints
 
         private static bool IsSuperAdmin(ClaimsPrincipal user)
         {
-            string role = user.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
-            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+            if (user == null || !user.Identity?.IsAuthenticated == true)
+            {
+                return false;
+            }
+
+            string role = user.FindFirst(ClaimTypes.Role)?.Value 
+                ?? user.FindFirst("role")?.Value 
+                ?? user.FindFirst("UserRole")?.Value 
+                ?? string.Empty;
+
+            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) || user.IsInRole("SuperAdmin");
         }
     }
 }

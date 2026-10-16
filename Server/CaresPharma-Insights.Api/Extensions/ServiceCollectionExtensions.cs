@@ -95,17 +95,33 @@ namespace CaresPharma_Insights.Api.Extensions
                         "http://localhost:5000", 
                         "https://localhost:5001", 
                         "http://localhost:4200",
+                        "https://dev-carespharma.netlify.app",
+                        "https://carespharma.netlify.app",
                         "https://dev-carespharma-insights.netlify.app", 
                         "https://carespharma-insights.netlify.app",
                         "https://carespharma.com",
-                        "https://claude.ai",
-                        "https://*.claude.ai"
+                        "https://claude.ai"
                     };
 
                     string[]? configOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
                     string[] allowedOrigins = configOrigins != null && configOrigins.Length > 0 ? configOrigins : defaultOrigins;
 
-                    policy.WithOrigins(allowedOrigins)
+                    policy.SetIsOriginAllowed(origin =>
+                          {
+                              if (string.IsNullOrWhiteSpace(origin)) return false;
+                              try
+                              {
+                                  Uri uri = new Uri(origin);
+                                  return uri.Host.EndsWith("netlify.app", StringComparison.OrdinalIgnoreCase) ||
+                                         uri.Host.EndsWith("carespharma.com", StringComparison.OrdinalIgnoreCase) ||
+                                         uri.Host.EndsWith("claude.ai", StringComparison.OrdinalIgnoreCase) ||
+                                         uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+                              }
+                              catch
+                              {
+                                  return false;
+                              }
+                          })
                           .AllowAnyHeader()
                           .AllowAnyMethod()
                           .AllowCredentials();
