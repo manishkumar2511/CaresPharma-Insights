@@ -19,6 +19,7 @@ namespace CaresPharma_Insights.Api.Extensions
             services.AddScoped<IMcpTool, GetSalesAndRevenueSummaryTool>();
             services.AddScoped<IMcpTool, GetLowStockMedicinesTool>();
             services.AddScoped<IMcpTool, GetCustomerCountMetricsTool>();
+            services.AddScoped<IMcpTool, GetCustomerListTool>();
             services.AddScoped<IMcpTool, GetPharmacySchemaTool>();
             services.AddScoped<IMcpTool, QueryPharmacyInsightsTool>();
 
