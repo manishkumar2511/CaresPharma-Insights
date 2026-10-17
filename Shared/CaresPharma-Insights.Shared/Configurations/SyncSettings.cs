@@ -10,6 +10,6 @@ namespace CaresPharma_Insights.Shared.Configurations
 
         public string[] ExcludedColumnKeywords { get; set; } = Array.Empty<string>();
 
-        public int SyncIntervalMinutes { get; set; } = 60;
+        public int SyncIntervalMinutes { get; set; } = 2;
     }
 }

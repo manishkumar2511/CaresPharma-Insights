@@ -155,11 +155,12 @@ namespace CaresPharma_Insights.Api.Endpoints
                     logger.LogWarning("No DB record found for ClientId: {ClientId}. Using fallback.", clientId);
                 }
 
-                // Issue high-trust token bound to the verified tenant
-                McpHandshakeToken handshakeToken = tokenService.GenerateToken(
+                // Issue high-trust reusable token bound to the verified tenant for continuous MCP sessions
+                McpHandshakeToken handshakeToken = tokenService.GenerateSessionToken(
                     pharmacyOwnerId: pharmacyOwnerId,
                     userId: pharmacyOwnerId,
-                    userRole: "PharmacyOwner"
+                    userRole: "PharmacyOwner",
+                    validityDuration: TimeSpan.FromDays(1)
                 );
 
                 return Results.Ok(new OAuthTokenResponse(

@@ -32,6 +32,9 @@ namespace CaresPharma_Insights.Domain.Models
         [JsonPropertyName("isClaimed")]
         public bool IsClaimed { get; private set; }
 
+        [JsonPropertyName("isReusable")]
+        public bool IsReusable { get; private set; }
+
         private McpHandshakeToken()
         {
             Token = string.Empty;
@@ -40,7 +43,7 @@ namespace CaresPharma_Insights.Domain.Models
             UserRole = string.Empty;
         }
 
-        public McpHandshakeToken(string pharmacyOwnerId, string userId, string userRole, TimeSpan validityDuration)
+        public McpHandshakeToken(string pharmacyOwnerId, string userId, string userRole, TimeSpan validityDuration, bool isReusable = false)
         {
             if (string.IsNullOrWhiteSpace(pharmacyOwnerId))
             {
@@ -54,9 +57,10 @@ namespace CaresPharma_Insights.Domain.Models
             CreatedAtUtc = DateTime.UtcNow;
             ExpiresAtUtc = DateTime.UtcNow.Add(validityDuration);
             IsClaimed = false;
+            IsReusable = isReusable;
         }
 
-        public bool IsValid => !IsClaimed && DateTime.UtcNow <= ExpiresAtUtc;
+        public bool IsValid => (IsReusable || !IsClaimed) && DateTime.UtcNow <= ExpiresAtUtc;
 
         public void MarkAsClaimed()
         {

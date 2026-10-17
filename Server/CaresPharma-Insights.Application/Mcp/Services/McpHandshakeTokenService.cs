@@ -7,12 +7,13 @@ namespace CaresPharma_Insights.Application.Mcp.Services
     public interface IMcpHandshakeTokenService
     {
         McpHandshakeToken GenerateToken(string pharmacyOwnerId, string userId, string userRole);
+        McpHandshakeToken GenerateSessionToken(string pharmacyOwnerId, string userId, string userRole, TimeSpan validityDuration);
         TenantSecurityContext? ValidateAndClaimToken(string token);
     }
 
     /// <summary>
-    /// Thread-safe service for issuing and validating short-lived 1-Click Claude handshake tokens.
-    /// In production, can be backed by Redis or DB; built here with high-performance concurrent memory storage.
+    /// Thread-safe service for issuing and validating short-lived 1-Click Claude handshake tokens
+    /// and persistent bearer session tokens for OAuth flows.
     /// </summary>
     public sealed class McpHandshakeTokenService : IMcpHandshakeTokenService
     {
@@ -21,7 +22,14 @@ namespace CaresPharma_Insights.Application.Mcp.Services
 
         public McpHandshakeToken GenerateToken(string pharmacyOwnerId, string userId, string userRole)
         {
-            var tokenRecord = new McpHandshakeToken(pharmacyOwnerId, userId, userRole, DefaultTokenValidity);
+            McpHandshakeToken tokenRecord = new McpHandshakeToken(pharmacyOwnerId, userId, userRole, DefaultTokenValidity, isReusable: false);
+            _tokens[tokenRecord.Token] = tokenRecord;
+            return tokenRecord;
+        }
+
+        public McpHandshakeToken GenerateSessionToken(string pharmacyOwnerId, string userId, string userRole, TimeSpan validityDuration)
+        {
+            McpHandshakeToken tokenRecord = new McpHandshakeToken(pharmacyOwnerId, userId, userRole, validityDuration, isReusable: true);
             _tokens[tokenRecord.Token] = tokenRecord;
             return tokenRecord;
         }
@@ -33,14 +41,18 @@ namespace CaresPharma_Insights.Application.Mcp.Services
                 return null;
             }
 
-            if (_tokens.TryGetValue(token, out var record) && record.IsValid)
+            if (_tokens.TryGetValue(token, out McpHandshakeToken? record) && record.IsValid)
             {
-                record.MarkAsClaimed();
+                if (!record.IsReusable)
+                {
+                    record.MarkAsClaimed();
+                }
+
                 return new TenantSecurityContext(
                     PharmacyOwnerId: record.PharmacyOwnerId,
                     UserId: record.UserId,
                     UserRole: record.UserRole,
-                    AuthSource: "Claude1ClickHandshake"
+                    AuthSource: record.IsReusable ? "ClaudeOAuthSession" : "Claude1ClickHandshake"
                 );
             }
 

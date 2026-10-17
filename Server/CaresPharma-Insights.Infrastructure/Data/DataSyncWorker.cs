@@ -36,7 +36,7 @@ namespace CaresPharma_Insights.Infrastructure.Data
             _pgConnectionFactory = pgConnectionFactory;
             _sqlServerConnectionString = configuration.GetConnectionString("SqlServerSource") ?? string.Empty;
             _syncSettings = syncSettingsOptions.Value;
-            _syncInterval = TimeSpan.FromMinutes(_syncSettings.SyncIntervalMinutes > 0 ? _syncSettings.SyncIntervalMinutes : 60);
+            _syncInterval = TimeSpan.FromMinutes(_syncSettings.SyncIntervalMinutes > 0 ? _syncSettings.SyncIntervalMinutes : 2);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

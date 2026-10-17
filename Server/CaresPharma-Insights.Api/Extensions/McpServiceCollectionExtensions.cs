@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using CaresPharma_Insights.Application.Mcp.Services;
+using CaresPharma_Insights.Application.Mcp.Tools;
 
 namespace CaresPharma_Insights.Api.Extensions
 {
@@ -12,7 +13,16 @@ namespace CaresPharma_Insights.Api.Extensions
             services.AddSingleton<IMcpHandshakeTokenService, McpHandshakeTokenService>();
             services.AddScoped<ITenantMcpAuthService, TenantMcpAuthService>();
 
-            // Register MCP domain tool handlers and protocol processors
+            // Register modular isolated MCP Tools (Separation of Concerns / OCP)
+            services.AddScoped<IMcpTool, GetCurrentInventoryStockTool>();
+            services.AddScoped<IMcpTool, GetExpiringMedicinesTool>();
+            services.AddScoped<IMcpTool, GetSalesAndRevenueSummaryTool>();
+            services.AddScoped<IMcpTool, GetLowStockMedicinesTool>();
+            services.AddScoped<IMcpTool, GetCustomerCountMetricsTool>();
+            services.AddScoped<IMcpTool, GetPharmacySchemaTool>();
+            services.AddScoped<IMcpTool, QueryPharmacyInsightsTool>();
+
+            // Register MCP domain tool registry & protocol dispatcher
             services.AddScoped<IMcpToolHandler, McpToolHandler>();
             services.AddScoped<IMcpProtocolService, McpProtocolService>();
 
