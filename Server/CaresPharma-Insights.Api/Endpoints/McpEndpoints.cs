@@ -146,6 +146,14 @@ namespace CaresPharma_Insights.Api.Endpoints
                     }
                 }
 
+                if (tenantContext == null)
+                {
+                    logger.LogWarning("Rejecting unauthenticated MCP connection on /mcp from IP: {Ip}", ipAddress);
+                    httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await httpContext.Response.WriteAsync("{\"error\":\"Unauthorized: Valid MCP client credentials or token required to connect.\"}", cancellationToken);
+                    return;
+                }
+
                 httpContext.Response.Headers.Append("Content-Type", "text/event-stream");
                 httpContext.Response.Headers.Append("Cache-Control", "no-cache, no-transform");
                 httpContext.Response.Headers.Append("Connection", "keep-alive");

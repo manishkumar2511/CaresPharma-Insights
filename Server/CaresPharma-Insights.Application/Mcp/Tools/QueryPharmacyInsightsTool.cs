@@ -62,6 +62,13 @@ namespace CaresPharma_Insights.Application.Mcp.Tools
             string? tenantId = tenantContext?.PharmacyOwnerId;
             string? userRole = tenantContext?.UserRole;
 
+            if (string.IsNullOrWhiteSpace(tenantId) && !string.Equals(userRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+            {
+                return new McpCallToolResult(
+                    new[] { new McpContentItem("text", "Security Error: Unable to resolve authenticated pharmacy tenant context. Access denied.") }, 
+                    IsError: true);
+            }
+
             string resultJson = await _dataRepository.ExecuteReadOnlyQueryAsync(
                 sql, 
                 tenantId: tenantId, 
