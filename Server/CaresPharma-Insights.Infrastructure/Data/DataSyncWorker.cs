@@ -143,10 +143,26 @@ namespace CaresPharma_Insights.Infrastructure.Data
 
             if (safeColumns.Count == 0) return;
 
-            // 3. Create destination table in PostgreSQL if not exists
+            // 3. Create destination table in PostgreSQL if not exists, and auto-evolve missing columns
             IEnumerable<string> colDefs = safeColumns.Select(c => $"\"{c.ColumnName}\" {MapSqlTypeToPgType(c.DataType)}");
             string createTableSql = $"CREATE TABLE IF NOT EXISTS \"{tableName}\" ({string.Join(", ", colDefs)});";
             await pgConn.ExecuteAsync(new CommandDefinition(createTableSql, cancellationToken: ct));
+
+            // Ensure any new columns added in SQL Server exist in PostgreSQL
+            IEnumerable<string> existingPgCols = await pgConn.QueryAsync<string>(new CommandDefinition(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = @Tbl",
+                new { Tbl = tableName },
+                cancellationToken: ct));
+            HashSet<string> existingPgColSet = new HashSet<string>(existingPgCols, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var col in safeColumns)
+            {
+                if (!existingPgColSet.Contains(col.ColumnName))
+                {
+                    string addColSql = $"ALTER TABLE \"{tableName}\" ADD COLUMN IF NOT EXISTS \"{col.ColumnName}\" {MapSqlTypeToPgType(col.DataType)};";
+                    await pgConn.ExecuteAsync(new CommandDefinition(addColSql, cancellationToken: ct));
+                }
+            }
 
             // 4. Create an unlogged temporary staging table with identical schema
             string stagingTable = $"staging_{tableName.ToLower()}";
@@ -165,7 +181,7 @@ namespace CaresPharma_Insights.Infrastructure.Data
             if (reader.HasRows)
             {
                 using NpgsqlBinaryImporter writer = await pgConn.BeginBinaryImportAsync(
-                    $"COPY \"{stagingTable}\" ({pgColsList}) FROM BINARY;", 
+                    $"COPY \"{stagingTable}\" ({pgColsList}) FROM STDIN (FORMAT BINARY);", 
                     ct);
 
                 while (await reader.ReadAsync(ct))
@@ -180,6 +196,10 @@ namespace CaresPharma_Insights.Infrastructure.Data
                         else
                         {
                             object val = reader.GetValue(i);
+                            if (val is byte[] byteArr && safeColumns[i].DataType.Equals("timestamp", StringComparison.OrdinalIgnoreCase))
+                            {
+                                val = Convert.ToBase64String(byteArr);
+                            }
                             await writer.WriteAsync(val, ct);
                         }
                     }
