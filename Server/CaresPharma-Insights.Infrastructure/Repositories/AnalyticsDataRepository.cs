@@ -142,26 +142,27 @@ namespace CaresPharma_Insights.Infrastructure.Repositories
                 
                 foreach (string tbl in tenantTables)
                 {
-                    if (Regex.IsMatch(clean, $@"\b{tbl}\b", RegexOptions.IgnoreCase) &&
+                    // Match both unquoted (Batches) and quoted ("Batches") table identifiers
+                    if (Regex.IsMatch(clean, $@"(^|[^\w""])(?:""{tbl}""|{tbl})([^\w""]|$)", RegexOptions.IgnoreCase) &&
                         !clean.Contains("PharmacyOwnerId", StringComparison.OrdinalIgnoreCase) &&
                         !clean.Contains("TenantId", StringComparison.OrdinalIgnoreCase))
                     {
                         // Check if WHERE clause exists
                         if (Regex.IsMatch(clean, @"\bWHERE\b", RegexOptions.IgnoreCase))
                         {
-                            clean = Regex.Replace(clean, @"\bWHERE\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') AND ", RegexOptions.IgnoreCase);
+                            clean = Regex.Replace(clean, @"\bWHERE\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}'::uuid) AND ", RegexOptions.IgnoreCase);
                         }
                         else if (Regex.IsMatch(clean, @"\bGROUP\s+BY\b", RegexOptions.IgnoreCase))
                         {
-                            clean = Regex.Replace(clean, @"\bGROUP\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') GROUP BY", RegexOptions.IgnoreCase);
+                            clean = Regex.Replace(clean, @"\bGROUP\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}'::uuid) GROUP BY", RegexOptions.IgnoreCase);
                         }
                         else if (Regex.IsMatch(clean, @"\bORDER\s+BY\b", RegexOptions.IgnoreCase))
                         {
-                            clean = Regex.Replace(clean, @"\bORDER\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}') ORDER BY", RegexOptions.IgnoreCase);
+                            clean = Regex.Replace(clean, @"\bORDER\s+BY\b", $"WHERE (\"PharmacyOwnerId\" = '{tenantId}'::uuid) ORDER BY", RegexOptions.IgnoreCase);
                         }
                         else
                         {
-                            clean += $" WHERE (\"PharmacyOwnerId\" = '{tenantId}' OR \"TenantId\" = '{tenantId}')";
+                            clean += $" WHERE (\"PharmacyOwnerId\" = '{tenantId}'::uuid)";
                         }
                         break;
                     }

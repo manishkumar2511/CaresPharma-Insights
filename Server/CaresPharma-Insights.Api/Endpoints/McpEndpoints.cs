@@ -204,6 +204,7 @@ namespace CaresPharma_Insights.Api.Endpoints
                 HttpContext httpContext,
                 IMcpSessionManager sessionManager,
                 IMcpHandshakeTokenService tokenService,
+                ITenantMcpAuthService authService,
                 IMcpProtocolService protocolService,
                 CancellationToken cancellationToken)
             {
@@ -232,14 +233,43 @@ namespace CaresPharma_Insights.Api.Endpoints
                     return Results.BadRequest(McpJsonRpcResponse.Fail(null, -32600, "Invalid JSON-RPC request"));
                 }
 
-                // Resolve tenant context bound to this active session, with fallback to Bearer token
+                // 1. Resolve tenant context bound to this active session
                 TenantSecurityContext? tenantContext = 
                     !string.IsNullOrEmpty(sessionId) ? sessionManager.GetSessionTenantContext(sessionId) : null;
 
+                // 2. If no session tenant, check for ClientId/ClientSecret directly in headers/query/Basic Auth
                 if (tenantContext == null)
                 {
-                    string? authHeader = httpContext.Request.Headers.Authorization.FirstOrDefault();
-                    if (!string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    string? clientId = httpContext.Request.Query["clientId"].FirstOrDefault() 
+                        ?? httpContext.Request.Query["client_id"].FirstOrDefault()
+                        ?? httpContext.Request.Headers["X-Client-Id"].FirstOrDefault();
+
+                    string? clientSecret = httpContext.Request.Query["clientSecret"].FirstOrDefault() 
+                        ?? httpContext.Request.Query["client_secret"].FirstOrDefault()
+                        ?? httpContext.Request.Headers["X-Client-Secret"].FirstOrDefault();
+
+                    string? authHeader = httpContext.Request.Headers["Authorization"].FirstOrDefault();
+                    if (string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            string credentials = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(authHeader[6..].Trim()));
+                            int colonIndex = credentials.IndexOf(':');
+                            if (colonIndex > 0)
+                            {
+                                clientId = credentials[..colonIndex];
+                                clientSecret = credentials[(colonIndex + 1)..];
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret))
+                    {
+                        tenantContext = await authService.ValidateCredentialsAsync(
+                            clientId, clientSecret, httpContext.Connection.RemoteIpAddress?.ToString(), httpContext.Request.Headers.UserAgent.FirstOrDefault(), cancellationToken);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
                         string token = authHeader[7..].Trim();
                         tenantContext = tokenService.ValidateAndClaimToken(token);
